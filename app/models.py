@@ -55,4 +55,4 @@ class Image(db.Model):
     filename = db.Column(db.String(256), nullable=False)
     phase_id = db.Column(db.Integer, db.ForeignKey('phase.id'))
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'))
-    subitem_id = db.Column(db.Integer, db.ForeignKey('subitem.id'))
+    subitem_id = db.Column(db.Integer, db.ForeignKey('sub_item.id'))

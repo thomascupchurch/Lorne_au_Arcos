@@ -28,8 +28,62 @@
         </div>
         <div class="planning-section">
             <h2>Planning Section</h2>
-            <!-- Planning UI will go here -->
-            <div id="planning-ui"></div>
+            <div>
+                <button onclick="showView('gantt')">Gantt Chart</button>
+                <button onclick="showView('calendar')">Calendar</button>
+                <button onclick="showView('timeline')">Timeline</button>
+            </div>
+            <div id="planning-ui">
+                <form id="project-form">
+                    <h3>Create Project</h3>
+                    <input type="text" name="project-title" placeholder="Project Title" required>
+                    <button type="submit">Add Project</button>
+                </form>
+                <form id="phase-form">
+                    <h3>Add Phase</h3>
+                    <input type="text" name="phase-title" placeholder="Phase Title" required>
+                    <input type="date" name="phase-start" required>
+                    <input type="number" name="phase-duration" placeholder="Duration (days)" required>
+                    <label><input type="checkbox" name="phase-milestone"> Milestone</label>
+                    <select name="phase-type">
+                        <option value="internal">Internal</option>
+                        <option value="external">External</option>
+                    </select>
+                    <button type="submit">Add Phase</button>
+                </form>
+                <form id="item-form">
+                    <h3>Add Item</h3>
+                    <input type="text" name="item-title" placeholder="Item Title" required>
+                    <input type="date" name="item-start" required>
+                    <input type="number" name="item-duration" placeholder="Duration (days)" required>
+                    <input type="text" name="item-dependencies" placeholder="Dependencies (IDs)">
+                    <label><input type="checkbox" name="item-milestone"> Milestone</label>
+                    <select name="item-type">
+                        <option value="internal">Internal</option>
+                        <option value="external">External</option>
+                    </select>
+                    <button type="submit">Add Item</button>
+                </form>
+                <form id="subitem-form">
+                    <h3>Add Sub-Item</h3>
+                    <input type="text" name="subitem-title" placeholder="Sub-Item Title" required>
+                    <input type="date" name="subitem-start" required>
+                    <input type="number" name="subitem-duration" placeholder="Duration (days)" required>
+                    <input type="text" name="subitem-dependencies" placeholder="Dependencies (IDs)">
+                    <label><input type="checkbox" name="subitem-milestone"> Milestone</label>
+                    <select name="subitem-type">
+                        <option value="internal">Internal</option>
+                        <option value="external">External</option>
+                    </select>
+                    <button type="submit">Add Sub-Item</button>
+                </form>
+                <div id="planning-hierarchy">
+                    <!-- Hierarchy will be rendered here -->
+                </div>
+                <div id="planning-view">
+                    <!-- Gantt, calendar, timeline views will be rendered here -->
+                </div>
+            </div>
         </div>
     </div>
     <script>
