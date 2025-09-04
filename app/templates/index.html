@@ -10,31 +10,60 @@
             fill: #4B4B4B !important;
             stroke: #4B4B4B !important;
         }
-        body { margin: 0; font-family: Arial, sans-serif; background: #4B4B4B; }
-        .container { display: flex; height: 100vh; }
-        .image-viewer { flex: 1; background: #FF8200; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .planning-section { flex: 2; background: #4B4B4B; color: #eee; padding: 2em; overflow-y: auto; }
-        .toggle-dark { display: none; }
-        .thumbnail { width: 80px; height: 80px; object-fit: cover; margin: 5px; cursor: pointer; border: 2px solid #ccc; }
-        .modal {
-            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.8); align-items: center; justify-content: center;
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            background: #4B4B4B;
         }
-        .modal-content {
-            max-width: 90vw; max-height: 90vh; display: block; margin: auto; border-radius: 8px;
+        .container {
+            display: flex;
+            height: 100vh;
+            gap: 2em;
         }
-        .modal-close {
-            position: absolute; top: 20px; right: 40px; color: #fff; font-size: 2em; cursor: pointer;
+        .image-viewer {
+            flex: 1;
+            background: #FF8200;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            border-radius: 24px;
+            margin: 2em 0 2em 2em;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+            padding: 2em;
         }
+        .planning-section {
+            flex: 2;
+            background: #4B4B4B;
+            color: #eee;
+        }
+        /* ...existing code... */
         .modal-edit {
-            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0; top: 0;
+            width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.7);
+            align-items: center;
+            justify-content: center;
         }
         .modal-edit-content {
-            background: #fff; padding: 2em; border-radius: 8px; min-width: 300px; max-width: 90vw;
+            background: #fff;
+            padding: 2em;
+            border-radius: 16px;
+            min-width: 300px;
+            max-width: 90vw;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.18);
         }
         .modal-edit-close {
-            position: absolute; top: 20px; right: 40px; color: #222; font-size: 2em; cursor: pointer;
+            position: absolute;
+            top: 20px;
+            right: 40px;
+            color: #222;
+            font-size: 2em;
+            cursor: pointer;
         }
     </style>
     <meta charset="UTF-8">
@@ -42,40 +71,13 @@
     <title>Project Planning App MVP</title>
     <link rel="stylesheet" href="https://unpkg.com/frappe-gantt@0.5.0/dist/frappe-gantt.css">
     <script src="https://unpkg.com/frappe-gantt@0.5.0/dist/frappe-gantt.min.js"></script>
-    <style>
-        body { margin: 0; font-family: Arial, sans-serif; }
-    .container { display: flex; height: 100vh; }
-    .image-viewer { flex: 1; background: #FF8200; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    .planning-section { flex: 2; background: #f4f4f4; color: #222; padding: 2em; overflow-y: auto; }
-    .darkmode .image-viewer { background: #FF8200; }
-    .darkmode .planning-section { background: #4B4B4B; color: #eee; }
-    .darkmode { background: #4B4B4B !important; }
-        .toggle-dark { position: absolute; top: 10px; right: 10px; }
-        .thumbnail { width: 80px; height: 80px; object-fit: cover; margin: 5px; cursor: pointer; border: 2px solid #ccc; }
-        .modal {
-            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.8); align-items: center; justify-content: center;
-        }
-        .modal-content {
-            max-width: 90vw; max-height: 90vh; display: block; margin: auto; border-radius: 8px;
-        }
-        .modal-close {
-            position: absolute; top: 20px; right: 40px; color: #fff; font-size: 2em; cursor: pointer;
-        }
-        .modal-edit {
-            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100vw; height: 100vh;
-            background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
-        }
-        .modal-edit-content {
-            background: #fff; padding: 2em; border-radius: 8px; min-width: 300px; max-width: 90vw;
-        }
-        .modal-edit-close {
-            position: absolute; top: 20px; right: 40px; color: #222; font-size: 2em; cursor: pointer;
-        }
-    </style>
+    <!-- Removed conflicting light mode styles and .darkmode rules -->
 </head>
 <body>
     <!-- Dark mode is now default, toggle removed -->
+    <header style="width:100%;display:flex;align-items:center;justify-content:center;padding:1em 0 0.5em 0;">
+        <img src="{{ url_for('static', filename='Power_T.svg') }}" alt="Power T" style="height:80px;" onerror="this.onerror=null;this.src='/static/Power_T.svg';this.alt='Power T logo not found';">
+    </header>
     <div class="container">
         <div class="image-viewer">
             <h2>Image Viewer</h2>
@@ -119,74 +121,104 @@
             </div>
         </div>
         <div class="planning-section">
-            <h2>Planning Section</h2>
-            <div>
-                <button onclick="showView('gantt')">Gantt Chart</button>
-                <button onclick="showView('calendar')">Calendar</button>
-                <button onclick="showView('timeline')">Timeline</button>
-            </div>
-            <div id="planning-ui">
-                <form id="project-form" action="/create_project" method="post">
-                    <h3>Create Project</h3>
-                    <input type="text" name="project-title" placeholder="Project Title" required>
-                    <button type="submit">Add Project</button>
-                </form>
-                <form id="phase-form" action="/create_phase" method="post">
-                    <h3>Add Phase</h3>
-                    <input type="text" name="phase-title" placeholder="Phase Title" required>
-                    <input type="date" name="phase-start" required>
-                    <input type="number" name="phase-duration" placeholder="Duration (days)" required>
-                    <label><input type="checkbox" name="phase-milestone"> Milestone</label>
-                    <select name="phase-type">
-                        <option value="internal">Internal</option>
-                        <option value="external">External</option>
-                    </select>
-                    <select name="project-id" id="phase-parent-project" required>
+            <div style="margin-bottom:2em;display:flex;align-items:center;gap:1em;">
+                <label for="project-select" style="font-weight:600;">Project:</label>
+                <form id="project-select-form" method="post" action="/set_project" style="display:inline-block;">
+                    <select name="project-id" id="project-select" style="min-width:180px;">
                         <option value="">Select Project</option>
                         {% for project in projects %}
                         <option value="{{ project.id }}">{{ project.title }}</option>
                         {% endfor %}
                     </select>
-                    <button type="submit">Add Phase</button>
+                    <button type="submit">Go</button>
                 </form>
-                <form id="item-form" action="/create_item" method="post">
-                    <h3>Add Item</h3>
-                    <input type="text" name="item-title" placeholder="Item Title" required>
-                    <input type="date" name="item-start" required>
-                    <input type="number" name="item-duration" placeholder="Duration (days)" required>
-                    <input type="text" name="item-dependencies" placeholder="Dependencies (IDs)">
-                    <label><input type="checkbox" name="item-milestone"> Milestone</label>
-                    <select name="item-type">
-                        <option value="internal">Internal</option>
-                        <option value="external">External</option>
-                    </select>
-                    <select name="phase-id" id="item-parent-phase" required>
-                        <option value="">Select Phase</option>
-                        {% for phase in phases %}
-                        <option value="{{ phase.id }}">{{ phase.title }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="submit">Add Item</button>
+                <form id="project-form" action="/create_project" method="post" style="display:inline-block;">
+                    <input type="text" name="project-title" placeholder="New Project Title" required style="min-width:160px;">
+                    <button type="submit">Create New Project</button>
                 </form>
-                <form id="subitem-form" action="/create_subitem" method="post">
-                    <h3>Add Sub-Item</h3>
-                    <input type="text" name="subitem-title" placeholder="Sub-Item Title" required>
-                    <input type="date" name="subitem-start" required>
-                    <input type="number" name="subitem-duration" placeholder="Duration (days)" required>
-                    <input type="text" name="subitem-dependencies" placeholder="Dependencies (IDs)">
-                    <label><input type="checkbox" name="subitem-milestone"> Milestone</label>
-                    <select name="subitem-type">
-                        <option value="internal">Internal</option>
-                        <option value="external">External</option>
-                    </select>
-                    <select name="item-id" id="subitem-parent-item" required>
-                        <option value="">Select Item</option>
-                        {% for item in items %}
-                        <option value="{{ item.id }}">{{ item.title }}</option>
-                        {% endfor %}
-                    </select>
-                    <button type="submit">Add Sub-Item</button>
-                </form>
+            </div>
+            <h2>Planning Section</h2>
+            <div id="planning-view-controls" style="display:flex;gap:1em;align-items:center;margin-bottom:1em;">
+                <button onclick="showView('gantt')" id="btn-gantt">Gantt Chart</button>
+                <button onclick="showView('calendar')" id="btn-calendar">Calendar</button>
+                <button onclick="showView('timeline')" id="btn-timeline">Timeline</button>
+            </div>
+            <div id="planning-view" style="margin-bottom:2em;">
+                <div id="gantt-view" style="display:block;">
+                    <h3>Gantt Chart</h3>
+                    <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px;"></div>
+                </div>
+                <div id="calendar-view" style="display:none;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <h3 style="margin:0;">Calendar</h3>
+                        <a href="/export_calendar_ics" style="background:#FF8200;color:#fff;padding:0.5em 1em;border-radius:8px;text-decoration:none;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,0.08);transition:background 0.2s;" onmouseover="this.style.background='#e46e00'" onmouseout="this.style.background='#FF8200'">Export to Outlook</a>
+                    </div>
+                    <div id="calendar-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px;"></div>
+                </div>
+                <div id="timeline-view" style="display:none;">
+                    <h3>Timeline</h3>
+                    <div id="timeline-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px;"></div>
+                </div>
+            </div>
+            <div id="planning-ui" style="background:rgba(255,255,255,0.03);border-radius:16px;padding:1em;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:1em;">
+                <div style="display:flex;gap:1em;flex-wrap:wrap;justify-content:space-between;">
+                    <form id="phase-form" action="/create_phase" method="post" style="flex:1;min-width:220px;max-width:260px;">
+                        <h4 style="margin-top:0;">Add Phase</h4>
+                        <input type="text" name="phase-title" placeholder="Phase Title" required>
+                        <input type="date" name="phase-start" required>
+                        <input type="number" name="phase-duration" placeholder="Duration (days)" required>
+                        <label style="display:block;margin-bottom:0.5em;"><input type="checkbox" name="phase-milestone"> Milestone</label>
+                        <select name="phase-type">
+                            <option value="internal">Internal</option>
+                            <option value="external">External</option>
+                        </select>
+                        <select name="project-id" id="phase-parent-project" required>
+                            <option value="">Select Project</option>
+                            {% for project in projects %}
+                            <option value="{{ project.id }}">{{ project.title }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">Add</button>
+                    </form>
+                    <form id="item-form" action="/create_item" method="post" style="flex:1;min-width:220px;max-width:260px;">
+                        <h4 style="margin-top:0;">Add Item</h4>
+                        <input type="text" name="item-title" placeholder="Item Title" required>
+                        <input type="date" name="item-start" required>
+                        <input type="number" name="item-duration" placeholder="Duration (days)" required>
+                        <input type="text" name="item-dependencies" placeholder="Dependencies (IDs)">
+                        <label style="display:block;margin-bottom:0.5em;"><input type="checkbox" name="item-milestone"> Milestone</label>
+                        <select name="item-type">
+                            <option value="internal">Internal</option>
+                            <option value="external">External</option>
+                        </select>
+                        <select name="phase-id" id="item-parent-phase" required>
+                            <option value="">Select Phase</option>
+                            {% for phase in phases %}
+                            <option value="{{ phase.id }}">{{ phase.title }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">Add</button>
+                    </form>
+                    <form id="subitem-form" action="/create_subitem" method="post" style="flex:1;min-width:220px;max-width:260px;">
+                        <h4 style="margin-top:0;">Add Sub-Item</h4>
+                        <input type="text" name="subitem-title" placeholder="Sub-Item Title" required>
+                        <input type="date" name="subitem-start" required>
+                        <input type="number" name="subitem-duration" placeholder="Duration (days)" required>
+                        <input type="text" name="subitem-dependencies" placeholder="Dependencies (IDs)">
+                        <label style="display:block;margin-bottom:0.5em;"><input type="checkbox" name="subitem-milestone"> Milestone</label>
+                        <select name="subitem-type">
+                            <option value="internal">Internal</option>
+                            <option value="external">External</option>
+                        </select>
+                        <select name="item-id" id="subitem-parent-item" required>
+                            <option value="">Select Item</option>
+                            {% for item in items %}
+                            <option value="{{ item.id }}">{{ item.title }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit">Add</button>
+                    </form>
+                </div>
                 <div id="planning-hierarchy">
                     <h3>Project Hierarchy</h3>
                     {% for project in projects %}
@@ -199,19 +231,6 @@
                             <form method="post" action="/delete_project/{{ project.id }}" onsubmit="return confirm('Delete this project and all its contents?');">
                                 <button type="submit" style="color:red;">Delete</button>
                             </form>
-                            <ul>
-                            {% for phase in project.phases %}
-                                <li><strong>Phase:</strong> {{ phase.title }}
-                                    <form method="post" action="/edit_phase/{{ phase.id }}">
-                                        <input type="text" name="phase-title" value="{{ phase.title }}" required>
-                                        <input type="date" name="phase-start" value="{{ phase.start_date }}" required>
-                                        <input type="number" name="phase-duration" value="{{ phase.duration }}" required>
-                                        <label><input type="checkbox" name="phase-milestone" {% if phase.is_milestone %}checked{% endif %}> Milestone</label>
-                                        <select name="phase-type">
-                                            <option value="internal" {% if phase.internal_external == 'internal' %}selected{% endif %}>Internal</option>
-                                            <option value="external" {% if phase.internal_external == 'external' %}selected{% endif %}>External</option>
-                                        </select>
-                                        <button type="submit">Edit</button>
                                     </form>
                                     <form method="post" action="/delete_phase/{{ phase.id }}" onsubmit="return confirm('Delete this phase and all its items?');">
                                         <button type="submit" style="color:red;">Delete</button>
@@ -228,129 +247,12 @@
                                             {% endfor %}
                                         </div>
                                     {% endif %}
-                                    <ul>
-                                    {% for item in phase.items %}
-                                        <li><strong>Item:</strong> {{ item.title }}
-                                            <form method="post" action="/edit_item/{{ item.id }}">
-                                                <input type="text" name="item-title" value="{{ item.title }}" required>
-                                                <input type="date" name="item-start" value="{{ item.start_date }}" required>
-                                                <input type="number" name="item-duration" value="{{ item.duration }}" required>
-                                                <input type="text" name="item-dependencies" value="{{ item.dependencies }}">
-                                                <label><input type="checkbox" name="item-milestone" {% if item.is_milestone %}checked{% endif %}> Milestone</label>
-                                                <select name="item-type">
-                                                    <option value="internal" {% if item.internal_external == 'internal' %}selected{% endif %}>Internal</option>
-                                                    <option value="external" {% if item.internal_external == 'external' %}selected{% endif %}>External</option>
-                                                </select>
-                                                <button type="submit">Edit</button>
-                                            </form>
-                                            <form method="post" action="/delete_item/{{ item.id }}" onsubmit="return confirm('Delete this item and all its sub-items?');">
-                                                <button type="submit" style="color:red;">Delete</button>
-                                            </form>
-                                            {% if item.images %}
-                                                <div>
-                                                    {% for img in item.images %}
-                                                        <span style="display:inline-block;position:relative;">
-                                                            <img src="{{ url_for('main.uploaded_file', filename=img.filename) }}" class="thumbnail" title="{{ img.filename }}">
-                                                            <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
-                                                                <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
-                                                            </form>
-                                                        </span>
-                                                    {% endfor %}
-                                                </div>
-                                            {% endif %}
-                                            <ul>
-                                            {% for subitem in item.subitems %}
-                                                <li><strong>Sub-Item:</strong> {{ subitem.title }}
-                                                    <form method="post" action="/edit_subitem/{{ subitem.id }}">
-                                                        <input type="text" name="subitem-title" value="{{ subitem.title }}" required>
-                                                        <input type="date" name="subitem-start" value="{{ subitem.start_date }}" required>
-                                                        <input type="number" name="subitem-duration" value="{{ subitem.duration }}" required>
-                                                        <input type="text" name="subitem-dependencies" value="{{ subitem.dependencies }}">
-                                                        <label><input type="checkbox" name="subitem-milestone" {% if subitem.is_milestone %}checked{% endif %}> Milestone</label>
-                                                        <select name="subitem-type">
-                                                            <option value="internal" {% if subitem.internal_external == 'internal' %}selected{% endif %}>Internal</option>
-                                                            <option value="external" {% if subitem.internal_external == 'external' %}selected{% endif %}>External</option>
-                                                        </select>
-                                                        <button type="submit">Edit</button>
-                                                    </form>
-                                                    <form method="post" action="/delete_subitem/{{ subitem.id }}" onsubmit="return confirm('Delete this sub-item?');">
-                                                        <button type="submit" style="color:red;">Delete</button>
-                                                    </form>
-                                                    {% if subitem.images %}
-                                                        <div>
-                                                            {% for img in subitem.images %}
-                                                                <span style="display:inline-block;position:relative;">
-                                                                    <img src="{{ url_for('main.uploaded_file', filename=img.filename) }}" class="thumbnail" title="{{ img.filename }}">
-                                                                    <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
-                                                                        <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
-                                                                    </form>
-                                                                </span>
-                                                            {% endfor %}
-                                                        </div>
-                                                    {% endif %}
-                                                </li>
-                                            {% endfor %}
-                                            </ul>
-                                        </li>
-                                    {% endfor %}
-                                    </ul>
-                                </li>
-                            {% endfor %}
+                                {% endfor %}
                             </ul>
                         </div>
                     {% endfor %}
                 </div>
-                <div id="planning-view">
-                    <div id="gantt-view" style="display:block;">
-                        <h3>Gantt Chart</h3>
-                        <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff;"></div>
-                    </div>
-<script>
-var ganttTasks = JSON.parse('{{ gantt_json_js|safe }}');
-function renderGantt() {
-    console.log('Gantt tasks:', ganttTasks);
-    try {
-        console.log('Gantt constructor:', typeof Gantt);
-    } catch (e) {
-        console.error('Gantt not defined:', e);
-    }
-    if (!ganttTasks || ganttTasks.length === 0) {
-        document.getElementById('gantt-chart').innerHTML = '<p style="text-align:center;line-height:400px;">No tasks to display</p>';
-        return;
-    }
-    if (typeof Gantt !== 'function') {
-        document.getElementById('gantt-chart').innerHTML = '<p style="color:red;text-align:center;">Gantt library not loaded</p>';
-        return;
-    }
-    var gantt = new Gantt("#gantt-chart", ganttTasks, {
-        view_mode: 'Day',
-        custom_popup_html: null,
-        on_date_change: function(task, start, end) {
-            // Send AJAX request to update start/end in backend
-            fetch('/update_gantt_task', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    id: task.id,
-                    start: start.toISOString().slice(0,10),
-                    end: end.toISOString().slice(0,10)
-                })
-            }).then(res => {
-                if(res.ok) {
-                    location.reload();
-                } else {
-                    alert('Error updating task.');
-                }
-            });
-        }
-    });
-}
-document.addEventListener('DOMContentLoaded', function() {
-    renderGantt();
-});
-</script>
+                <!-- Removed duplicate Gantt Chart container -->
 <script>
 function getGanttTasks() {
     try {
@@ -404,13 +306,13 @@ function renderGantt() {
 document.addEventListener('DOMContentLoaded', function() {
     renderGantt();
 });
-window.showView = (function(orig){
-    // Gantt view is always default; toggling is disabled for now
+/* Removed incomplete window.showView assignment to fix syntax error */
 </script>
                     </div>
                     <div id="calendar-view" style="display:none;">
-                                                <h3>Calendar View</h3>
-                                                <div id="calendar-container" style="height:400px;"></div>
+                            <h3>Calendar View</h3>
+                            <div id="calendar-chart" style="height:400px;"></div>
+                            <div id="calendar-empty-message" style="display:none;text-align:center;line-height:400px;color:#888;font-size:1.2em;">No events to display</div>
                                                 <!-- Edit Event Modal -->
                                                 <div class="modal fade" id="editEventModal" tabindex="-1" role="dialog" aria-labelledby="editEventModalLabel" aria-hidden="true">
                                                     <div class="modal-dialog" role="document">
@@ -446,66 +348,90 @@ window.showView = (function(orig){
                                                     </div>
                                                 </div>
                                                 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css">
+                                                <style>
+                                                /* Darken FullCalendar grid and text */
+                                                .fc .fc-col-header-cell, .fc .fc-daygrid-day-number, .fc .fc-daygrid-day {
+                                                    color: #222 !important;
+                                                }
+                                                .fc .fc-daygrid-day-frame {
+                                                    background: #fff !important;
+                                                    border-color: #bbb !important;
+                                                }
+                                                .fc .fc-scrollgrid, .fc .fc-scrollgrid-section {
+                                                    border-color: #888 !important;
+                                                }
+                                                .fc .fc-toolbar-title {
+                                                    color: #222 !important;
+                                                }
+                                                </style>
                                                 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
                                                 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
                                                 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
                                                 <script>
                                                 var calendarEvents = JSON.parse('{{ calendar_events_json|safe }}');
                                                 document.addEventListener('DOMContentLoaded', function() {
-                                                        var calendarEl = document.getElementById('calendar-container');
+                                                        var calendarEl = document.getElementById('calendar-chart');
                                                         if (!calendarEl) return;
                                                         window._calendarInstance = new FullCalendar.Calendar(calendarEl, {
-                                                            initialView: 'dayGridMonth',
-                                                            events: calendarEvents,
-                                                            height: 400,
-                                                            eventClick: function(info) {
-                                                                var event = info.event;
-                                                                document.getElementById('eventTitle').value = event.title;
-                                                                document.getElementById('eventStart').value = event.startStr.slice(0,10);
-                                                                document.getElementById('eventEnd').value = event.endStr ? event.endStr.slice(0,10) : event.startStr.slice(0,10);
-                                                                if (event.id) {
-                                                                    document.getElementById('eventId').value = event.id;
-                                                                } else {
-                                                                    if (event.title.startsWith('Phase: ')) {
-                                                                        document.getElementById('eventId').value = 'phase-' + event.title.replace('Phase: ', '').split(' ')[0];
-                                                                    } else if (event.title.startsWith('Item: ')) {
-                                                                        document.getElementById('eventId').value = 'item-' + event.title.replace('Item: ', '').split(' ')[0];
+                                                                initialView: 'dayGridMonth',
+                                                                events: calendarEvents,
+                                                                height: 400,
+                                                                eventClick: function(info) {
+                                                                    var event = info.event;
+                                                                    document.getElementById('eventTitle').value = event.title;
+                                                                    document.getElementById('eventStart').value = event.startStr.slice(0,10);
+                                                                    document.getElementById('eventEnd').value = event.endStr ? event.endStr.slice(0,10) : event.startStr.slice(0,10);
+                                                                    if (event.id) {
+                                                                        document.getElementById('eventId').value = event.id;
                                                                     } else {
-                                                                        document.getElementById('eventId').value = event.title;
+                                                                        if (event.title.startsWith('Phase: ')) {
+                                                                            document.getElementById('eventId').value = 'phase-' + event.title.replace('Phase: ', '').split(' ')[0];
+                                                                        } else if (event.title.startsWith('Item: ')) {
+                                                                            document.getElementById('eventId').value = 'item-' + event.title.replace('Item: ', '').split(' ')[0];
+                                                                        } else {
+                                                                            document.getElementById('eventId').value = event.title;
+                                                                        }
                                                                     }
+                                                                    $('#editEventModal').modal('show');
+                                                                    window.currentCalendarEvent = event;
+                                                                },
+                                                                editable: true,
+                                                                eventDrop: function(info) {
+                                                                    var event = info.event;
+                                                                    var id = document.getElementById('eventId').value || event.id || event.title;
+                                                                    fetch('/update_gantt_task', {
+                                                                        method: 'POST',
+                                                                        headers: {
+                                                                            'Content-Type': 'application/json'
+                                                                        },
+                                                                        body: JSON.stringify({
+                                                                            id: id,
+                                                                            start: event.startStr,
+                                                                            end: event.endStr || event.startStr
+                                                                        })
+                                                                    }).then(function(res) {
+                                                                        if(res.ok) {
+                                                                            location.reload();
+                                                                        } else {
+                                                                            alert('Error updating event.');
+                                                                        }
+                                                                    });
                                                                 }
-                                                                $('#editEventModal').modal('show');
-                                                                window.currentCalendarEvent = event;
-                                                            },
-                                                            editable: true,
-                                                            eventDrop: function(info) {
-                                                                var event = info.event;
-                                                                var id = document.getElementById('eventId').value || event.id || event.title;
-                                                                fetch('/update_gantt_task', {
-                                                                    method: 'POST',
-                                                                    headers: {
-                                                                        'Content-Type': 'application/json'
-                                                                    },
-                                                                    body: JSON.stringify({
-                                                                        id: id,
-                                                                        start: event.startStr,
-                                                                        end: event.endStr || event.startStr
-                                                                    })
-                                                                }).then(res => {
-                                                                    if(res.ok) {
-                                                                        location.reload();
-                                                                    } else {
-                                                                        alert('Error updating event.');
-                                                                    }
-                                                                });
-                                                            }
-                                                        });
-                                                        window._calendarInstance.render();
+                                                            });
+                                                        // Show empty message if no events
+                                                        if(calendarEvents.length === 0) {
+                                                            document.getElementById('calendar-chart').style.display = 'none';
+                                                            var emptyMsg = document.getElementById('calendar-empty-message');
+                                                            if (emptyMsg) emptyMsg.style.display = 'block';
+                                                        } else {
+                                                            window._calendarInstance.render();
+                                                        }
                                                         document.getElementById('saveEventBtn').onclick = function() {
                                                             var event = window.currentCalendarEvent;
+                                                            if(!event) return;
                                                             var newTitle = document.getElementById('eventTitle').value;
                                                             var newStart = document.getElementById('eventStart').value;
-                                                            var newEnd = document.getElementById('eventEnd').value;
+                                                            var newEnd = document.getElementById('eventEnd').value || newStart;
                                                             var id = document.getElementById('eventId').value;
                                                             event.setProp('title', newTitle);
                                                             event.setStart(newStart);
@@ -519,12 +445,9 @@ window.showView = (function(orig){
                                                             }
                                                             fetch('/update_gantt_task', {
                                                                 method: 'POST',
-                                                                headers: {
-                                                                    'Content-Type': 'application/json'
-                                                                },
+                                                                headers: { 'Content-Type': 'application/json' },
                                                                 body: JSON.stringify({
                                                                     id: id,
-                                                                    title: newTitle,
                                                                     start: newStart,
                                                                     end: newEnd
                                                                 })
@@ -536,162 +459,8 @@ window.showView = (function(orig){
                                                                     alert('Error updating event.');
                                                                 }
                                                             });
-                                                        };
-                                                });
-                                                </script>
-                    </div>
-                    <div id="timeline-view" style="display:none;">
-                        <h3>Timeline View (Placeholder)</h3>
-                        <p>Timeline will be rendered here.</p>
-                    </div>
-                </div>
-                <script>
-        // Persist last used parent for phase, item, and subitem creation
-        document.addEventListener('DOMContentLoaded', function() {
-            // Phase form: project parent
-            const phaseParent = document.getElementById('phase-parent-project');
-            if (phaseParent) {
-                const lastProject = localStorage.getItem('lastProjectId');
-                if (lastProject) phaseParent.value = lastProject;
-                phaseParent.addEventListener('change', function() {
-                    localStorage.setItem('lastProjectId', phaseParent.value);
-                });
-            }
-            // Item form: phase parent
-            const itemParent = document.getElementById('item-parent-phase');
-            if (itemParent) {
-                const lastPhase = localStorage.getItem('lastPhaseId');
-                if (lastPhase) itemParent.value = lastPhase;
-                itemParent.addEventListener('change', function() {
-                    localStorage.setItem('lastPhaseId', itemParent.value);
-                });
-            }
-            // Subitem form: item parent
-            const subitemParent = document.getElementById('subitem-parent-item');
-            if (subitemParent) {
-                const lastItem = localStorage.getItem('lastItemId');
-                if (lastItem) subitemParent.value = lastItem;
-                subitemParent.addEventListener('change', function() {
-                    localStorage.setItem('lastItemId', subitemParent.value);
-                });
-            }
-        });
-                    function showView(view) {
-                        if(view === 'calendar') {
-                            var calendarView = document.getElementById('calendar-view');
-                            var calendarEl = document.getElementById('calendar-container');
-                            // Only re-create if not already visible
-                            if(calendarView.style.display !== 'block') {
-                                if(window._calendarInstance) {
-                                    window._calendarInstance.destroy();
-                                }
-                                window._calendarInstance = new FullCalendar.Calendar(calendarEl, {
-                                    initialView: 'dayGridMonth',
-                                    events: JSON.parse('{{ calendar_events_json|safe }}'),
-                                    height: 400,
-                                    eventClick: function(info) {
-                                        var event = info.event;
-                                        document.getElementById('eventTitle').value = event.title;
-                                        document.getElementById('eventStart').value = event.startStr.slice(0,10);
-                                        document.getElementById('eventEnd').value = event.endStr ? event.endStr.slice(0,10) : event.startStr.slice(0,10);
-                                        if (event.id) {
-                                            document.getElementById('eventId').value = event.id;
-                                        } else {
-                                            if (event.title.startsWith('Phase: ')) {
-                                                document.getElementById('eventId').value = 'phase-' + event.title.replace('Phase: ', '').split(' ')[0];
-                                            } else if (event.title.startsWith('Item: ')) {
-                                                document.getElementById('eventId').value = 'item-' + event.title.replace('Item: ', '').split(' ')[0];
-                                            } else {
-                                                document.getElementById('eventId').value = event.title;
-                                            }
-                                        }
-                                        $('#editEventModal').modal('show');
-                                        window.currentCalendarEvent = event;
-                                    },
-                                    editable: true,
-                                    eventDrop: function(info) {
-                                        var event = info.event;
-                                        var id = document.getElementById('eventId').value || event.id || event.title;
-                                        fetch('/update_gantt_task', {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json'
-                                            },
-                                            body: JSON.stringify({
-                                                id: id,
-                                                start: event.startStr,
-                                                end: event.endStr || event.startStr
-                                            })
-                                        }).then(res => {
-                                            if(res.ok) {
-                                                location.reload();
-                                            } else {
-                                                alert('Error updating event.');
-                                            }
-                                        });
-                                    }
-                                });
-                                window._calendarInstance.render();
-                                document.getElementById('saveEventBtn').onclick = function() {
-                                    var event = window.currentCalendarEvent;
-                                    var newTitle = document.getElementById('eventTitle').value;
-                                    var newStart = document.getElementById('eventStart').value;
-                                    var newEnd = document.getElementById('eventEnd').value;
-                                    var id = document.getElementById('eventId').value;
-                                    event.setProp('title', newTitle);
-                                    event.setStart(newStart);
-                                    event.setEnd(newEnd);
-                                    if (!(id.startsWith('phase-') || id.startsWith('item-'))) {
-                                        if (newTitle.startsWith('Phase: ')) {
-                                            id = 'phase-' + newTitle.replace('Phase: ', '').split(' ')[0];
-                                        } else if (newTitle.startsWith('Item: ')) {
-                                            id = 'item-' + newTitle.replace('Item: ', '').split(' ')[0];
-                                        }
-                                    }
-                                    fetch('/update_gantt_task', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json'
-                                        },
-                                        body: JSON.stringify({
-                                            id: id,
-                                            title: newTitle,
-                                            start: newStart,
-                                            end: newEnd
-                                        })
-                                    }).then(res => {
-                                        if(res.ok) {
-                                            $('#editEventModal').modal('hide');
-                                            location.reload();
-                                        } else {
-                                            alert('Error updating event.');
-                                        }
-                                    });
-                                };
-                            }
-                        }
-                        if(view === 'calendar') {
-                            setTimeout(function() {
-                                if(window._calendarInstance) {
-                                    window.requestAnimationFrame(function() {
-                                        window._calendarInstance.updateSize();
-                                        window._calendarInstance.render();
-                                    });
-                                }
-                            }, 0);
-                        }
-                        document.getElementById('gantt-view').style.display = 'none';
-                        document.getElementById('calendar-view').style.display = 'none';
-                        document.getElementById('timeline-view').style.display = 'none';
-                        if(view === 'gantt') document.getElementById('gantt-view').style.display = 'block';
-                        if(view === 'gantt') document.getElementById('gantt-view').style.display = 'block';
-                        else document.getElementById('gantt-view').style.display = 'none';
-                        if(view === 'calendar') document.getElementById('calendar-view').style.display = 'block';
-                        else document.getElementById('calendar-view').style.display = 'none';
-                        if(view === 'timeline') document.getElementById('timeline-view').style.display = 'block';
-                        else document.getElementById('timeline-view').style.display = 'none';
-                        if(view === 'timeline') document.getElementById('timeline-view').style.display = 'block';
-                    }
+                            };
+                        }); // Close DOMContentLoaded listener
                 </script>
             </div>
         </div>
@@ -778,8 +547,8 @@ window.showView = (function(orig){
             }
             document.getElementById('modal-edit-content').innerHTML = formHtml;
             document.getElementById('modal-edit').style.display = 'flex';
-        }
-        function closeEditModal(event) {
+    }
+    function closeEditModal(event) {
             if(event.target.classList.contains('modal-edit') || event.target.classList.contains('modal-edit-close')) {
                 document.getElementById('modal-edit').style.display = 'none';
                 document.getElementById('modal-edit-content').innerHTML = '';

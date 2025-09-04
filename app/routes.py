@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_from_directory, current_app
+
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_from_directory, current_app, send_file, session
 import os
 from werkzeug.utils import secure_filename
 from app.models import db, User, Project, Phase, Item, SubItem, Image
@@ -8,19 +9,31 @@ from datetime import datetime, timedelta
 import csv
 import io
 import zipfile
-from flask import send_file
 
 main = Blueprint('main', __name__, url_prefix='')
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'uploads')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 
+@main.route('/set_project', methods=['POST'])
+@login_required
+def set_project():
+    project_id = request.form.get('project-id')
+    session['selected_project_id'] = project_id
+    return redirect(url_for('main.index'))
+
 @main.route('/')
 @login_required
 def index():
     projects = Project.query.all()
-    phases = Phase.query.all()
-    items = Item.query.all()
-    subitems = SubItem.query.all()
+    selected_project_id = session.get('selected_project_id')
+    if selected_project_id:
+        phases = Phase.query.filter_by(project_id=selected_project_id).all()
+        items = Item.query.join(Phase).filter(Phase.project_id==selected_project_id).all()
+        subitems = SubItem.query.join(Item).join(Phase).filter(Phase.project_id==selected_project_id).all()
+    else:
+        phases = Phase.query.all()
+        items = Item.query.all()
+        subitems = SubItem.query.all()
     # Build Gantt chart data in Python
     import json
     from datetime import datetime, timedelta
