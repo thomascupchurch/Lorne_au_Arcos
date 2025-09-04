@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin - User Management</title>
+</head>
+<body>
+    <h2>User Management (Admin Only)</h2>
+    <ul>
+        {% for user in users %}
+            <li>{{ user.username }} {% if not user.is_admin %}<a href="{{ url_for('main.make_admin', user_id=user.id) }}">Make Admin</a>{% else %}(Admin){% endif %}</li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('main.index') }}">Back to Planning</a>
+</body>
+</html>

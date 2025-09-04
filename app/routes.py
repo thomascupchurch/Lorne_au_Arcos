@@ -1,15 +1,15 @@
-
-
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_from_directory
 import os
 from werkzeug.utils import secure_filename
 from app.models import db, User, Project, Phase, Item, SubItem, Image
+from flask_login import login_required, current_user
 
 main = Blueprint('main', __name__)
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 
 @main.route('/')
+@login_required
 def index():
     projects = Project.query.all()
     phases = Phase.query.all()
@@ -18,20 +18,35 @@ def index():
     return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems)
 
 @main.route('/upload', methods=['POST'])
+@login_required
 def upload_file():
     if 'file' not in request.files:
         flash('No file part')
         return redirect(url_for('main.index'))
     file = request.files['file']
-    if file.filename == '':
-        flash('No selected file')
+    association_type = request.form.get('association-type')
+    association_id = request.form.get('association-id')
+    if file.filename == '' or not association_type or not association_id:
+        flash('Missing file or association info')
         return redirect(url_for('main.index'))
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         if not os.path.exists(UPLOAD_FOLDER):
             os.makedirs(UPLOAD_FOLDER)
         file.save(os.path.join(UPLOAD_FOLDER, filename))
-        flash('File uploaded successfully')
+        # Parse association
+        phase_id = item_id = subitem_id = None
+        if association_type == 'phase' and association_id.startswith('phase-'):
+            phase_id = int(association_id.split('-')[1])
+        elif association_type == 'item' and association_id.startswith('item-'):
+            item_id = int(association_id.split('-')[1])
+        elif association_type == 'subitem' and association_id.startswith('subitem-'):
+            subitem_id = int(association_id.split('-')[1])
+        # Save image association
+        img = Image(filename=filename, phase_id=phase_id, item_id=item_id, subitem_id=subitem_id)
+        db.session.add(img)
+        db.session.commit()
+        flash('File uploaded and associated successfully')
     return redirect(url_for('main.index'))
 
 def allowed_file(filename):
@@ -43,11 +58,12 @@ def uploaded_file(filename):
 
 # Project creation
 @main.route('/create_project', methods=['POST'])
+@login_required
 def create_project():
     title = request.form.get('project-title')
     if title:
-        # For MVP, assign to first user or None
-        owner = User.query.first()
+        # Assign to current user
+        owner = current_user
         project = Project(title=title, owner=owner)
         db.session.add(project)
         db.session.commit()
@@ -56,6 +72,7 @@ def create_project():
 
 # Phase creation
 @main.route('/create_phase', methods=['POST'])
+@login_required
 def create_phase():
     title = request.form.get('phase-title')
     start_date = request.form.get('phase-start')
@@ -72,6 +89,7 @@ def create_phase():
 
 # Item creation
 @main.route('/create_item', methods=['POST'])
+@login_required
 def create_item():
     title = request.form.get('item-title')
     start_date = request.form.get('item-start')
@@ -89,6 +107,7 @@ def create_item():
 
 # SubItem creation
 @main.route('/create_subitem', methods=['POST'])
+@login_required
 def create_subitem():
     title = request.form.get('subitem-title')
     start_date = request.form.get('subitem-start')
@@ -103,3 +122,25 @@ def create_subitem():
         db.session.commit()
         flash('Sub-Item added!')
     return redirect(url_for('main.index'))
+
+@main.route('/make_admin/<int:user_id>')
+@login_required
+def make_admin(user_id):
+    if not current_user.is_admin:
+        flash('Admin access required.')
+        return redirect(url_for('main.index'))
+    user = User.query.get(user_id)
+    if user:
+        user.is_admin = True
+        db.session.commit()
+        flash(f'User {user.username} is now an admin.')
+    return redirect(url_for('main.index'))
+
+@main.route('/admin/users')
+@login_required
+def admin_users():
+    if not current_user.is_admin:
+        flash('Admin access required.')
+        return redirect(url_for('main.index'))
+    users = User.query.all()
+    return render_template('admin_users.html', users=users)
