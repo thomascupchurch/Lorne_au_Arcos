@@ -11,7 +11,7 @@ import zipfile
 from flask import send_file
 
 main = Blueprint('main', __name__, url_prefix='')
-UPLOAD_FOLDER = 'uploads'
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'uploads')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 
 @main.route('/')
@@ -72,7 +72,8 @@ def index():
                 'color': '#4B4B4B' if getattr(item, 'internal_external', None) == 'external' else '#FF8200'
             })
     calendar_events_json = json.dumps(calendar_events)
-    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, gantt_json_js=gantt_json_js, calendar_events_json=calendar_events_json)
+    images = Image.query.all()
+    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js, calendar_events_json=calendar_events_json)
 
 @main.route('/upload', methods=['POST'])
 @login_required
@@ -111,6 +112,13 @@ def allowed_file(filename):
 
 @main.route('/uploads/<filename>')
 def uploaded_file(filename):
+    import os
+    abs_file_path = os.path.join(UPLOAD_FOLDER, filename)
+    print(f"Serving image: {abs_file_path}")
+    if not os.path.exists(abs_file_path):
+        print(f"File not found: {abs_file_path}")
+        from flask import abort
+        abort(404)
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 # Project creation
@@ -484,11 +492,18 @@ def update_gantt_task():
         return 'Invalid date', 400
     # Update phase/item/subitem
     updated = False
+    new_title = data.get('title')
     if tid.startswith('phase-'):
         obj = Phase.query.get(int(tid.split('-')[1]))
         if obj:
             obj.start_date = start
             obj.duration = duration
+            if new_title:
+                # Remove 'Phase: ' prefix if present
+                if new_title.startswith('Phase: '):
+                    obj.title = new_title.replace('Phase: ', '', 1)
+                else:
+                    obj.title = new_title
             db.session.commit()
             updated = True
     elif tid.startswith('item-'):
@@ -503,6 +518,12 @@ def update_gantt_task():
             else:
                 obj.start_date = datetime.strptime(start, '%Y-%m-%d').date()
             obj.duration = duration
+            if new_title:
+                # Remove 'Item: ' prefix if present
+                if new_title.startswith('Item: '):
+                    obj.title = new_title.replace('Item: ', '', 1)
+                else:
+                    obj.title = new_title
             db.session.commit()
             updated = True
     # (Optional: add subitem support if needed)

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="dark">
 <head>
     <style>
         .gantt .bar {
@@ -10,6 +10,32 @@
             fill: #4B4B4B !important;
             stroke: #4B4B4B !important;
         }
+        body { margin: 0; font-family: Arial, sans-serif; background: #4B4B4B; }
+        .container { display: flex; height: 100vh; }
+        .image-viewer { flex: 1; background: #FF8200; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .planning-section { flex: 2; background: #4B4B4B; color: #eee; padding: 2em; overflow-y: auto; }
+        .toggle-dark { display: none; }
+        .thumbnail { width: 80px; height: 80px; object-fit: cover; margin: 5px; cursor: pointer; border: 2px solid #ccc; }
+        .modal {
+            display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.8); align-items: center; justify-content: center;
+        }
+        .modal-content {
+            max-width: 90vw; max-height: 90vh; display: block; margin: auto; border-radius: 8px;
+        }
+        .modal-close {
+            position: absolute; top: 20px; right: 40px; color: #fff; font-size: 2em; cursor: pointer;
+        }
+        .modal-edit {
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+        }
+        .modal-edit-content {
+            background: #fff; padding: 2em; border-radius: 8px; min-width: 300px; max-width: 90vw;
+        }
+        .modal-edit-close {
+            position: absolute; top: 20px; right: 40px; color: #222; font-size: 2em; cursor: pointer;
+        }
     </style>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,11 +44,12 @@
     <script src="https://unpkg.com/frappe-gantt@0.5.0/dist/frappe-gantt.min.js"></script>
     <style>
         body { margin: 0; font-family: Arial, sans-serif; }
-        .container { display: flex; height: 100vh; }
-        .image-viewer { flex: 1; background: #222; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .planning-section { flex: 2; background: #f4f4f4; color: #222; padding: 2em; overflow-y: auto; }
-        .darkmode .image-viewer { background: #111; }
-        .darkmode .planning-section { background: #222; color: #eee; }
+    .container { display: flex; height: 100vh; }
+    .image-viewer { flex: 1; background: #FF8200; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .planning-section { flex: 2; background: #f4f4f4; color: #222; padding: 2em; overflow-y: auto; }
+    .darkmode .image-viewer { background: #FF8200; }
+    .darkmode .planning-section { background: #4B4B4B; color: #eee; }
+    .darkmode { background: #4B4B4B !important; }
         .toggle-dark { position: absolute; top: 10px; right: 10px; }
         .thumbnail { width: 80px; height: 80px; object-fit: cover; margin: 5px; cursor: pointer; border: 2px solid #ccc; }
         .modal {
@@ -48,7 +75,7 @@
     </style>
 </head>
 <body>
-    <button class="toggle-dark" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    <!-- Dark mode is now default, toggle removed -->
     <div class="container">
         <div class="image-viewer">
             <h2>Image Viewer</h2>
@@ -74,7 +101,22 @@
                 </select>
                 <button type="submit">Upload</button>
             </form>
-            <div id="thumbnails"></div>
+            <div id="image-viewer-thumbnails">
+                {% for img in images %}
+                    <div style="display:inline-block; position:relative;">
+                        <img src="{{ url_for('main.uploaded_file', filename=img.filename) }}" class="thumbnail" title="{{ img.filename }}" onclick="showFullImage(this.src)">
+                        {% if not img.phase_id and not img.item_id and not img.subitem_id %}
+                        <form action="/delete_image/{{ img.id }}" method="post" style="position:absolute;top:2px;right:2px;">
+                            <button type="submit" style="background:#fff;color:#FF8200;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-weight:bold;">&times;</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+            <div id="full-image-container" style="display:none; margin-top:10px;">
+                <img id="full-image" src="" style="max-width:90%;max-height:60vh;border:4px solid #fff;border-radius:8px;box-shadow:0 2px 8px #222;">
+                <div><button onclick="hideFullImage()">Close</button></div>
+            </div>
         </div>
         <div class="planning-section">
             <h2>Planning Section</h2>
@@ -412,74 +454,88 @@ window.showView = (function(orig){
                                                 document.addEventListener('DOMContentLoaded', function() {
                                                         var calendarEl = document.getElementById('calendar-container');
                                                         if (!calendarEl) return;
-                                                        var calendar = new FullCalendar.Calendar(calendarEl, {
-                                                                initialView: 'dayGridMonth',
-                                                                events: calendarEvents,
-                                                                height: 400,
-                                                                eventClick: function(info) {
-                                                                        var event = info.event;
-                                                                        // Fill modal fields
-                                                                        document.getElementById('eventTitle').value = event.title;
-                                                                        document.getElementById('eventStart').value = event.startStr.slice(0,10);
-                                                                        document.getElementById('eventEnd').value = event.endStr ? event.endStr.slice(0,10) : event.startStr.slice(0,10);
-                                                                        document.getElementById('eventId').value = event.id || event.title;
-                                                                        // Show modal
-                                                                        $('#editEventModal').modal('show');
-                                                                        // Save reference for later
-                                                                        window.currentCalendarEvent = event;
-                                                                },
-                                                                editable: true,
-                                                                eventDrop: function(info) {
-                                                                        var event = info.event;
-                                                                        var id = document.getElementById('eventId').value || event.id || event.title;
-                                                                        fetch('/update_gantt_task', {
-                                                                                method: 'POST',
-                                                                                headers: {
-                                                                                        'Content-Type': 'application/json'
-                                                                                },
-                                                                                body: JSON.stringify({
-                                                                                        id: id,
-                                                                                        start: event.startStr,
-                                                                                        end: event.endStr || event.startStr
-                                                                                })
-                                                                        }).then(res => {
-                                                                                if(res.ok) {
-                                                                                        location.reload();
-                                                                                } else {
-                                                                                        alert('Error updating event.');
-                                                                                }
-                                                                        });
+                                                        window._calendarInstance = new FullCalendar.Calendar(calendarEl, {
+                                                            initialView: 'dayGridMonth',
+                                                            events: calendarEvents,
+                                                            height: 400,
+                                                            eventClick: function(info) {
+                                                                var event = info.event;
+                                                                document.getElementById('eventTitle').value = event.title;
+                                                                document.getElementById('eventStart').value = event.startStr.slice(0,10);
+                                                                document.getElementById('eventEnd').value = event.endStr ? event.endStr.slice(0,10) : event.startStr.slice(0,10);
+                                                                if (event.id) {
+                                                                    document.getElementById('eventId').value = event.id;
+                                                                } else {
+                                                                    if (event.title.startsWith('Phase: ')) {
+                                                                        document.getElementById('eventId').value = 'phase-' + event.title.replace('Phase: ', '').split(' ')[0];
+                                                                    } else if (event.title.startsWith('Item: ')) {
+                                                                        document.getElementById('eventId').value = 'item-' + event.title.replace('Item: ', '').split(' ')[0];
+                                                                    } else {
+                                                                        document.getElementById('eventId').value = event.title;
+                                                                    }
                                                                 }
-                                                        });
-                                                        calendar.render();
-                                                        document.getElementById('saveEventBtn').onclick = function() {
-                                                                var event = window.currentCalendarEvent;
-                                                                var newTitle = document.getElementById('eventTitle').value;
-                                                                var newStart = document.getElementById('eventStart').value;
-                                                                var newEnd = document.getElementById('eventEnd').value;
-                                                                var id = document.getElementById('eventId').value;
-                                                                event.setProp('title', newTitle);
-                                                                event.setStart(newStart);
-                                                                event.setEnd(newEnd);
+                                                                $('#editEventModal').modal('show');
+                                                                window.currentCalendarEvent = event;
+                                                            },
+                                                            editable: true,
+                                                            eventDrop: function(info) {
+                                                                var event = info.event;
+                                                                var id = document.getElementById('eventId').value || event.id || event.title;
                                                                 fetch('/update_gantt_task', {
-                                                                        method: 'POST',
-                                                                        headers: {
-                                                                                'Content-Type': 'application/json'
-                                                                        },
-                                                                        body: JSON.stringify({
-                                                                                id: id,
-                                                                                title: newTitle,
-                                                                                start: newStart,
-                                                                                end: newEnd
-                                                                        })
+                                                                    method: 'POST',
+                                                                    headers: {
+                                                                        'Content-Type': 'application/json'
+                                                                    },
+                                                                    body: JSON.stringify({
+                                                                        id: id,
+                                                                        start: event.startStr,
+                                                                        end: event.endStr || event.startStr
+                                                                    })
                                                                 }).then(res => {
-                                                                        if(res.ok) {
-                                                                                $('#editEventModal').modal('hide');
-                                                                                location.reload();
-                                                                        } else {
-                                                                                alert('Error updating event.');
-                                                                        }
+                                                                    if(res.ok) {
+                                                                        location.reload();
+                                                                    } else {
+                                                                        alert('Error updating event.');
+                                                                    }
                                                                 });
+                                                            }
+                                                        });
+                                                        window._calendarInstance.render();
+                                                        document.getElementById('saveEventBtn').onclick = function() {
+                                                            var event = window.currentCalendarEvent;
+                                                            var newTitle = document.getElementById('eventTitle').value;
+                                                            var newStart = document.getElementById('eventStart').value;
+                                                            var newEnd = document.getElementById('eventEnd').value;
+                                                            var id = document.getElementById('eventId').value;
+                                                            event.setProp('title', newTitle);
+                                                            event.setStart(newStart);
+                                                            event.setEnd(newEnd);
+                                                            if (!(id.startsWith('phase-') || id.startsWith('item-'))) {
+                                                                if (newTitle.startsWith('Phase: ')) {
+                                                                    id = 'phase-' + newTitle.replace('Phase: ', '').split(' ')[0];
+                                                                } else if (newTitle.startsWith('Item: ')) {
+                                                                    id = 'item-' + newTitle.replace('Item: ', '').split(' ')[0];
+                                                                }
+                                                            }
+                                                            fetch('/update_gantt_task', {
+                                                                method: 'POST',
+                                                                headers: {
+                                                                    'Content-Type': 'application/json'
+                                                                },
+                                                                body: JSON.stringify({
+                                                                    id: id,
+                                                                    title: newTitle,
+                                                                    start: newStart,
+                                                                    end: newEnd
+                                                                })
+                                                            }).then(res => {
+                                                                if(res.ok) {
+                                                                    $('#editEventModal').modal('hide');
+                                                                    location.reload();
+                                                                } else {
+                                                                    alert('Error updating event.');
+                                                                }
+                                                            });
                                                         };
                                                 });
                                                 </script>
@@ -521,11 +577,119 @@ window.showView = (function(orig){
             }
         });
                     function showView(view) {
+                        if(view === 'calendar') {
+                            var calendarView = document.getElementById('calendar-view');
+                            var calendarEl = document.getElementById('calendar-container');
+                            // Only re-create if not already visible
+                            if(calendarView.style.display !== 'block') {
+                                if(window._calendarInstance) {
+                                    window._calendarInstance.destroy();
+                                }
+                                window._calendarInstance = new FullCalendar.Calendar(calendarEl, {
+                                    initialView: 'dayGridMonth',
+                                    events: JSON.parse('{{ calendar_events_json|safe }}'),
+                                    height: 400,
+                                    eventClick: function(info) {
+                                        var event = info.event;
+                                        document.getElementById('eventTitle').value = event.title;
+                                        document.getElementById('eventStart').value = event.startStr.slice(0,10);
+                                        document.getElementById('eventEnd').value = event.endStr ? event.endStr.slice(0,10) : event.startStr.slice(0,10);
+                                        if (event.id) {
+                                            document.getElementById('eventId').value = event.id;
+                                        } else {
+                                            if (event.title.startsWith('Phase: ')) {
+                                                document.getElementById('eventId').value = 'phase-' + event.title.replace('Phase: ', '').split(' ')[0];
+                                            } else if (event.title.startsWith('Item: ')) {
+                                                document.getElementById('eventId').value = 'item-' + event.title.replace('Item: ', '').split(' ')[0];
+                                            } else {
+                                                document.getElementById('eventId').value = event.title;
+                                            }
+                                        }
+                                        $('#editEventModal').modal('show');
+                                        window.currentCalendarEvent = event;
+                                    },
+                                    editable: true,
+                                    eventDrop: function(info) {
+                                        var event = info.event;
+                                        var id = document.getElementById('eventId').value || event.id || event.title;
+                                        fetch('/update_gantt_task', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json'
+                                            },
+                                            body: JSON.stringify({
+                                                id: id,
+                                                start: event.startStr,
+                                                end: event.endStr || event.startStr
+                                            })
+                                        }).then(res => {
+                                            if(res.ok) {
+                                                location.reload();
+                                            } else {
+                                                alert('Error updating event.');
+                                            }
+                                        });
+                                    }
+                                });
+                                window._calendarInstance.render();
+                                document.getElementById('saveEventBtn').onclick = function() {
+                                    var event = window.currentCalendarEvent;
+                                    var newTitle = document.getElementById('eventTitle').value;
+                                    var newStart = document.getElementById('eventStart').value;
+                                    var newEnd = document.getElementById('eventEnd').value;
+                                    var id = document.getElementById('eventId').value;
+                                    event.setProp('title', newTitle);
+                                    event.setStart(newStart);
+                                    event.setEnd(newEnd);
+                                    if (!(id.startsWith('phase-') || id.startsWith('item-'))) {
+                                        if (newTitle.startsWith('Phase: ')) {
+                                            id = 'phase-' + newTitle.replace('Phase: ', '').split(' ')[0];
+                                        } else if (newTitle.startsWith('Item: ')) {
+                                            id = 'item-' + newTitle.replace('Item: ', '').split(' ')[0];
+                                        }
+                                    }
+                                    fetch('/update_gantt_task', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({
+                                            id: id,
+                                            title: newTitle,
+                                            start: newStart,
+                                            end: newEnd
+                                        })
+                                    }).then(res => {
+                                        if(res.ok) {
+                                            $('#editEventModal').modal('hide');
+                                            location.reload();
+                                        } else {
+                                            alert('Error updating event.');
+                                        }
+                                    });
+                                };
+                            }
+                        }
+                        if(view === 'calendar') {
+                            setTimeout(function() {
+                                if(window._calendarInstance) {
+                                    window.requestAnimationFrame(function() {
+                                        window._calendarInstance.updateSize();
+                                        window._calendarInstance.render();
+                                    });
+                                }
+                            }, 0);
+                        }
                         document.getElementById('gantt-view').style.display = 'none';
                         document.getElementById('calendar-view').style.display = 'none';
                         document.getElementById('timeline-view').style.display = 'none';
                         if(view === 'gantt') document.getElementById('gantt-view').style.display = 'block';
+                        if(view === 'gantt') document.getElementById('gantt-view').style.display = 'block';
+                        else document.getElementById('gantt-view').style.display = 'none';
                         if(view === 'calendar') document.getElementById('calendar-view').style.display = 'block';
+                        else document.getElementById('calendar-view').style.display = 'none';
+                        if(view === 'timeline') document.getElementById('timeline-view').style.display = 'block';
+                        else document.getElementById('timeline-view').style.display = 'none';
                         if(view === 'timeline') document.getElementById('timeline-view').style.display = 'block';
                     }
                 </script>
@@ -533,9 +697,7 @@ window.showView = (function(orig){
         </div>
     </div>
     <div id="image-modal" class="modal" onclick="closeModal(event)">
-        <span class="modal-close" onclick="closeModal(event)">&times;</span>
-        <img id="modal-img" class="modal-content" src="" alt="Full Size Image">
-    </div>
+    <!-- Modal removed: images now display in viewer section -->
     <div id="modal-edit" class="modal-edit" onclick="closeEditModal(event)">
         <span class="modal-edit-close" onclick="closeEditModal(event)">&times;</span>
         <div class="modal-edit-content" id="modal-edit-content">
@@ -554,21 +716,14 @@ window.showView = (function(orig){
             if(view === 'calendar') document.getElementById('calendar-view').style.display = 'block';
             if(view === 'timeline') document.getElementById('timeline-view').style.display = 'block';
         }
-        // Modal logic for thumbnails
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.thumbnail').forEach(function(img) {
-                img.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    document.getElementById('modal-img').src = img.src;
-                    document.getElementById('image-modal').style.display = 'flex';
-                });
-            });
-        });
-        function closeModal(event) {
-            if(event.target.classList.contains('modal') || event.target.classList.contains('modal-close')) {
-                document.getElementById('image-modal').style.display = 'none';
-                document.getElementById('modal-img').src = '';
-            }
+        // Image viewer logic
+        function showFullImage(src) {
+            document.getElementById('full-image').src = src;
+            document.getElementById('full-image-container').style.display = 'block';
+        }
+        function hideFullImage() {
+            document.getElementById('full-image').src = '';
+            document.getElementById('full-image-container').style.display = 'none';
         }
         function openEditModal(type, id, title, start, duration, milestone, internal_external, dependencies) {
             event.stopPropagation();
