@@ -6,7 +6,8 @@ from app.routes import main
 from app.models import db, User
 
 def create_app():
-    app = Flask(__name__)
+    # Explicitly set static_folder to top-level 'static' directory if not auto-detected
+    app = Flask(__name__, static_folder='../static', static_url_path='/static')
     app.config['SECRET_KEY'] = 'replace-this-secret-key'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

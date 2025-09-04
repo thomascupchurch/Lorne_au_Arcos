@@ -88,6 +88,16 @@ def index():
     images = Image.query.all()
     return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js, calendar_events_json=calendar_events_json)
 
+@main.route('/power_t_inline')
+def power_t_inline():
+    # Quick inline SVG fallback response
+    svg_path = os.path.join(current_app.root_path, '..', 'static', 'Power_T.svg')
+    if os.path.exists(svg_path):
+        return send_file(svg_path, mimetype='image/svg+xml')
+    # minimal inline T shape fallback
+    fallback = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 70'><rect width='120' height='70' fill='#FF8200'/><rect x='50' y='20' width='20' height='40' fill='#fff'/></svg>"""
+    return fallback, 200, { 'Content-Type':'image/svg+xml' }
+
 @main.route('/upload', methods=['POST'])
 @login_required
 def upload_file():

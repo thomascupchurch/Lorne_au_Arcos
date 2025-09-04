@@ -18,26 +18,85 @@
         .container {
             display: flex;
             height: 100vh;
-            gap: 2em;
+            gap: 0; /* handle provides its own spacing */
+            max-width: 100vw;
+            overflow: hidden; /* prevent page horizontal scroll */
         }
         .image-viewer {
-            flex: 1;
+            flex: 0 0 auto;
             background: #FF8200;
             color: #fff;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: stretch;
             justify-content: flex-start;
             border-radius: 24px;
             margin: 2em 0 2em 2em;
             box-shadow: 0 4px 24px rgba(0,0,0,0.12);
-            padding: 2em;
+            padding: 1.25em 1.5em 1.5em;
+            width: 380px;
+            min-width: 260px;
+            max-width: 720px;
+            min-height: calc(100vh - 4em);
+            max-height: calc(100vh - 4em);
+            box-sizing: border-box;
         }
+        .image-viewer h2 { margin: 0 0 0.75em 0; font-size: 1.3em; }
+        .image-viewer form { width: 100%; margin-bottom: 0.75em; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+        #image-viewer-thumbnails { flex:1 1 auto; width:100%; overflow-y:auto; padding:4px; display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start; }
+        #image-viewer-thumbnails::-webkit-scrollbar { width: 8px; }
+        #image-viewer-thumbnails::-webkit-scrollbar-track { background: rgba(255,255,255,0.15); border-radius:8px; }
+        #image-viewer-thumbnails::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.35); border-radius:8px; }
+        .thumbnail { width:72px; height:72px; object-fit:cover; border:2px solid #fff; border-radius:10px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:transform .15s; }
+        .thumbnail:hover { transform:scale(1.05); }
+        #full-image-container { flex:0 0 auto; width:100%; margin-top:0.5em; background:rgba(0,0,0,0.15); border:2px dashed rgba(255,255,255,0.4); border-radius:16px; padding:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:220px; max-height:300px; box-sizing:border-box; }
+        #full-image-container.empty { opacity:0.6; }
+        #full-image { max-width:100%; max-height:200px; object-fit:contain; }
+        #full-image-container button { margin-top:6px; background:#fff; color:#FF8200; border:none; padding:6px 14px; border-radius:20px; font-weight:600; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.25); }
+        #full-image-container button:hover { background:#ffe0c2; }
         .planning-section {
-            flex: 2;
+            flex: 1 1 auto;
             background: #4B4B4B;
             color: #eee;
+            min-width: 0; /* allow flexbox to shrink */
+            display:flex;
+            flex-direction:column;
+            overflow:hidden;
         }
+        .planning-scroll {
+            flex:1 1 auto;
+            overflow-y:auto;
+            overflow-x:hidden;
+            padding: 0 1.25em 2em 1.25em;
+            box-sizing:border-box;
+        }
+        @media (max-width:1400px){
+            #image-viewer-panel{ width:320px !important; }
+        }
+        @media (max-width:1100px){
+            #image-viewer-panel{ display:none; }
+            #viewer-resize-handle{ display:none; }
+            .planning-section{ border-left: none; }
+        }
+        .resize-handle {
+            flex: 0 0 10px;
+            cursor: col-resize;
+            position: relative;
+            margin: 2em 0;
+            width: 10px;
+            background: linear-gradient(90deg, rgba(255,130,0,0.15), rgba(255,130,0,0.4), rgba(255,130,0,0.15));
+            border-radius: 6px;
+            transition: background .2s;
+        }
+        .resize-handle:before {
+            content: '';
+            position: absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+            width: 4px; height: 40px; border-radius:2px;
+            background: rgba(255,255,255,0.55);
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+        }
+        .resize-handle:hover { background: linear-gradient(90deg, rgba(255,130,0,0.35), rgba(255,130,0,0.65), rgba(255,130,0,0.35)); }
+        .resizing * { user-select: none !important; cursor: col-resize !important; }
         /* ...existing code... */
         .modal-edit {
             display: none;
@@ -65,6 +124,13 @@
             font-size: 2em;
             cursor: pointer;
         }
+    /* Power T overlay styling inside planning section */
+    .planning-section { position:relative; }
+    #power-t-logo { position:absolute; top:8px; left:50%; transform:translateX(-50%); height:90%; max-height:95%; width:auto; opacity:0.09; pointer-events:none; z-index:0; }
+    .planning-section .planning-scroll { position:relative; z-index:1; }
+    @media (max-width:1400px){ #power-t-logo { height:80%; } }
+    @media (max-width:1100px){ #power-t-logo { height:70%; } }
+    @media (max-width:800px){ #power-t-logo { height:55%; } }
     </style>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -74,12 +140,9 @@
     <!-- Removed conflicting light mode styles and .darkmode rules -->
 </head>
 <body>
-    <!-- Dark mode is now default, toggle removed -->
-    <header style="width:100%;display:flex;align-items:center;justify-content:center;padding:1em 0 0.5em 0;">
-        <img src="{{ url_for('static', filename='Power_T.svg') }}" alt="Power T" style="height:80px;" onerror="this.onerror=null;this.src='/static/Power_T.svg';this.alt='Power T logo not found';">
-    </header>
+    <!-- Dark mode is now default, toggle removed; Power T moved inside planning section as overlay -->
     <div class="container">
-        <div class="image-viewer">
+    <div class="image-viewer" id="image-viewer-panel">
             <h2>Image Viewer</h2>
             <form action="/upload" method="post" enctype="multipart/form-data">
                 <input type="file" name="file" accept="image/png, image/jpeg, application/pdf">
@@ -115,12 +178,31 @@
                     </div>
                 {% endfor %}
             </div>
-            <div id="full-image-container" style="display:none; margin-top:10px;">
-                <img id="full-image" src="" style="max-width:90%;max-height:60vh;border:4px solid #fff;border-radius:8px;box-shadow:0 2px 8px #222;">
-                <div><button onclick="hideFullImage()">Close</button></div>
+            <div id="full-image-container" class="empty">
+                <div id="placeholder-text" style="text-align:center;font-size:0.9em;line-height:1.4; padding:0 6px;">Select a thumbnail to preview it here.</div>
+                <img id="full-image" src="" style="display:none;">
+                <button id="close-full-image" style="display:none;" onclick="hideFullImage()">Close</button>
             </div>
         </div>
-        <div class="planning-section">
+    <div id="viewer-resize-handle" class="resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize image viewer" title="Drag to resize (double-click to reset)"></div>
+                <div class="planning-section">
+                    <img id="power-t-logo" src="{{ url_for('static', filename='Power_T.svg') }}" alt="Power T">
+                    <script>
+                        document.addEventListener('DOMContentLoaded',function(){
+                            var img=document.getElementById('power-t-logo');
+                            if(!img) return;
+                            let retried=false;
+                            img.addEventListener('error',function(){
+                                if(!retried){
+                                    retried=true;
+                                    this.src='/power_t_inline';
+                                } else {
+                                    this.alt='Power T logo unavailable';
+                                }
+                            });
+                        });
+                    </script>
+                    <div class="planning-scroll">
             <div style="margin-bottom:2em;display:flex;align-items:center;gap:1em;">
                 <label for="project-select" style="font-weight:600;">Project:</label>
                 <form id="project-select-form" method="post" action="/set_project" style="display:inline-block;">
@@ -221,37 +303,141 @@
                 </div>
                 <div id="planning-hierarchy">
                     <h3>Project Hierarchy</h3>
+                    <style>
+                        .tree-toggle { cursor:pointer; font-weight:600; }
+                        .tree-children { margin-left:1em; border-left:2px solid #666; padding-left:0.75em; }
+                        .meta { color:#bbb; font-size:0.85em; }
+                        .actions a, .actions button { font-size:0.75em; margin-left:0.5em; }
+                        .inline-edit { background:rgba(255,255,255,0.05); padding:6px 8px; border-radius:8px; margin:4px 0 8px 18px; }
+                        .inline-edit input[type=text], .inline-edit input[type=date], .inline-edit input[type=number], .inline-edit select { font-size:0.75em; padding:2px 4px; margin-right:4px; }
+                        .inline-edit button { font-size:0.7em; margin-right:4px; }
+                        .node-line button.small { font-size:0.65em; margin-left:6px; }
+                        .node-line { display:inline-block; }
+                    </style>
                     {% for project in projects %}
-                        <div><strong>Project:</strong> {{ project.title }}
-                            <a href="/export_project/{{ project.id }}" style="margin-left:1em;">Export</a>
-                            <form method="post" action="/edit_project/{{ project.id }}">
+                    <div class="project-block" style="margin-bottom:0.75em;">
+                        <div class="node-line">
+                            <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
+                            <strong>{{ project.title }}</strong>
+                            <span class="meta">({{ project.phases|length }} phases)</span>
+                            <span class="actions">
+                                <a href="/export_project/{{ project.id }}">Export</a>
+                                <form method="post" action="/delete_project/{{ project.id }}" style="display:inline;" onsubmit="return confirm('Delete project?');">
+                                    <button type="submit" style="color:red;">Del</button>
+                                </form>
+                                <button type="button" class="small" onclick="toggleEdit('proj-edit-{{ project.id }}')">Edit</button>
+                            </span>
+                        </div>
+                        <div id="proj-edit-{{ project.id }}" class="inline-edit" style="display:none;">
+                            <form method="post" action="/edit_project/{{ project.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
                                 <input type="text" name="project-title" value="{{ project.title }}" required>
-                                <button type="submit">Edit</button>
+                                <button type="submit">Save</button>
+                                <button type="button" onclick="toggleEdit('proj-edit-{{ project.id }}')">Cancel</button>
                             </form>
-                            <form method="post" action="/delete_project/{{ project.id }}" onsubmit="return confirm('Delete this project and all its contents?');">
-                                <button type="submit" style="color:red;">Delete</button>
-                            </form>
+                        </div>
+                        <div class="tree-children">
+                            {% for phase in project.phases %}
+                            <div style="margin:4px 0;">
+                                <div class="node-line">
+                                    <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
+                                    <strong>Phase:</strong> {{ phase.title }} <span class="meta">{{ phase.start_date }} / {{ phase.duration }}d</span>
+                                    <span class="actions">
+                                        <form method="post" action="/delete_phase/{{ phase.id }}" style="display:inline;" onsubmit="return confirm('Delete phase?');"><button type="submit" style="color:red;">Del</button></form>
+                                        <button type="button" class="small" onclick="toggleEdit('phase-edit-{{ phase.id }}')">Edit</button>
+                                    </span>
+                                </div>
+                                <div id="phase-edit-{{ phase.id }}" class="inline-edit" style="display:none;">
+                                    <form method="post" action="/edit_phase/{{ phase.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+                                        <input type="text" name="phase-title" value="{{ phase.title }}" required>
+                                        <input type="date" name="phase-start" value="{{ phase.start_date }}" required>
+                                        <input type="number" name="phase-duration" value="{{ phase.duration }}" required style="width:70px;">
+                                        <label style="font-size:0.65em;">M <input type="checkbox" name="phase-milestone" {% if phase.is_milestone %}checked{% endif %}></label>
+                                        <select name="phase-type">
+                                            <option value="internal" {% if phase.internal_external=='internal' %}selected{% endif %}>Int</option>
+                                            <option value="external" {% if phase.internal_external=='external' %}selected{% endif %}>Ext</option>
+                                        </select>
+                                        <button type="submit">Save</button>
+                                        <button type="button" onclick="toggleEdit('phase-edit-{{ phase.id }}')">Cancel</button>
                                     </form>
-                                    <form method="post" action="/delete_phase/{{ phase.id }}" onsubmit="return confirm('Delete this phase and all its items?');">
-                                        <button type="submit" style="color:red;">Delete</button>
-                                    </form>
-                                    {% if phase.images %}
-                                        <div>
-                                            {% for img in phase.images %}
-                                                <span style="display:inline-block;position:relative;">
-                                                    <img src="{{ url_for('main.uploaded_file', filename=img.filename) }}" class="thumbnail" title="{{ img.filename }}">
-                                                    <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
-                                                        <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
+                                </div>
+                                <div class="tree-children">
+                                    {% for item in phase.items %}
+                                    <div style="margin:2px 0;">
+                                        <div class="node-line">
+                                            <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
+                                            <strong>Item:</strong> {{ item.title }} <span class="meta">{{ item.start_date }} / {{ item.duration }}d</span>
+                                            <span class="actions">
+                                                <form method="post" action="/delete_item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Delete item?');"><button type="submit" style="color:red;">Del</button></form>
+                                                <button type="button" class="small" onclick="toggleEdit('item-edit-{{ item.id }}')">Edit</button>
+                                            </span>
+                                        </div>
+                                        <div id="item-edit-{{ item.id }}" class="inline-edit" style="display:none;">
+                                            <form method="post" action="/edit_item/{{ item.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+                                                <input type="text" name="item-title" value="{{ item.title }}" required>
+                                                <input type="date" name="item-start" value="{{ item.start_date }}" required>
+                                                <input type="number" name="item-duration" value="{{ item.duration }}" required style="width:70px;">
+                                                <input type="text" name="item-dependencies" value="{{ item.dependencies or '' }}" placeholder="Deps" style="width:90px;">
+                                                <label style="font-size:0.65em;">M <input type="checkbox" name="item-milestone" {% if item.is_milestone %}checked{% endif %}></label>
+                                                <select name="item-type">
+                                                    <option value="internal" {% if item.internal_external=='internal' %}selected{% endif %}>Int</option>
+                                                    <option value="external" {% if item.internal_external=='external' %}selected{% endif %}>Ext</option>
+                                                </select>
+                                                <button type="submit">Save</button>
+                                                <button type="button" onclick="toggleEdit('item-edit-{{ item.id }}')">Cancel</button>
+                                            </form>
+                                        </div>
+                                        <div class="tree-children">
+                                            {% for subitem in item.subitems %}
+                                            <div style="margin:2px 0;">
+                                                <div class="node-line">
+                                                    <strong>Sub:</strong> {{ subitem.title }} <span class="meta">{{ subitem.start_date }} / {{ subitem.duration }}d</span>
+                                                    <span class="actions">
+                                                        <form method="post" action="/delete_subitem/{{ subitem.id }}" style="display:inline;" onsubmit="return confirm('Delete sub-item?');"><button type="submit" style="color:red;">Del</button></form>
+                                                        <button type="button" class="small" onclick="toggleEdit('subitem-edit-{{ subitem.id }}')">Edit</button>
+                                                    </span>
+                                                </div>
+                                                <div id="subitem-edit-{{ subitem.id }}" class="inline-edit" style="display:none;">
+                                                    <form method="post" action="/edit_subitem/{{ subitem.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+                                                        <input type="text" name="subitem-title" value="{{ subitem.title }}" required>
+                                                        <input type="date" name="subitem-start" value="{{ subitem.start_date }}" required>
+                                                        <input type="number" name="subitem-duration" value="{{ subitem.duration }}" required style="width:70px;">
+                                                        <input type="text" name="subitem-dependencies" value="{{ subitem.dependencies or '' }}" placeholder="Deps" style="width:90px;">
+                                                        <label style="font-size:0.65em;">M <input type="checkbox" name="subitem-milestone" {% if subitem.is_milestone %}checked{% endif %}></label>
+                                                        <select name="subitem-type">
+                                                            <option value="internal" {% if subitem.internal_external=='internal' %}selected{% endif %}>Int</option>
+                                                            <option value="external" {% if subitem.internal_external=='external' %}selected{% endif %}>Ext</option>
+                                                        </select>
+                                                        <button type="submit">Save</button>
+                                                        <button type="button" onclick="toggleEdit('subitem-edit-{{ subitem.id }}')">Cancel</button>
                                                     </form>
-                                                </span>
+                                                </div>
+                                            </div>
                                             {% endfor %}
                                         </div>
-                                    {% endif %}
-                                {% endfor %}
-                            </ul>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
                         </div>
+                    </div>
                     {% endfor %}
                 </div>
+                <script>
+                    function toggleNode(el){
+                        var next=el.parentElement.nextElementSibling; // expects the children container
+                        if(!next) return;
+                        if(next.style.display==='none'){ next.style.display='block'; el.textContent='[–]'; }
+                        else { next.style.display='none'; el.textContent='[+]'; }
+                    }
+                    function toggleEdit(id){
+                        var el = document.getElementById(id);
+                        if(!el) return;
+                        el.style.display = (el.style.display==='none'|| el.style.display==='') ? 'block':'none';
+                    }
+                </script>
+                <!-- Hidden Gantt data for script parsing -->
+                <script id="gantt-data" type="application/json">{{ gantt_json_js|safe }}</script>
                 <!-- Removed duplicate Gantt Chart container -->
 <script>
 function getGanttTasks() {
@@ -368,14 +554,35 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
                                                 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
                                                 <script>
-                                                var calendarEvents = JSON.parse('{{ calendar_events_json|safe }}');
+                                                var calendarEvents = JSON.parse('{{ calendar_events_json|safe }}').map(function(e){
+                                                    // Ensure each event has an id for reliable editing
+                                                    if(!e.id){
+                                                        if(e.title.startsWith('Phase: ')) e.id = 'phase-' + e.title.replace('Phase: ','').replace(/\s+/g,'-');
+                                                        else if(e.title.startsWith('Item: ')) e.id = 'item-' + e.title.replace('Item: ','').replace(/\s+/g,'-');
+                                                        else e.id = 'evt-' + btoa(e.title).replace(/=/g,'');
+                                                    }
+                                                    return e;
+                                                });
                                                 document.addEventListener('DOMContentLoaded', function() {
                                                         var calendarEl = document.getElementById('calendar-chart');
                                                         if (!calendarEl) return;
                                                         window._calendarInstance = new FullCalendar.Calendar(calendarEl, {
                                                                 initialView: 'dayGridMonth',
+                                                                selectable: true,
+                                                                editable: true,
+                                                                height: 420,
                                                                 events: calendarEvents,
-                                                                height: 400,
+                                                                select: function(selInfo){
+                                                                    // Prefill modal for new event
+                                                                    document.getElementById('eventTitle').value = '';
+                                                                    document.getElementById('eventStart').value = selInfo.startStr.slice(0,10);
+                                                                    // FullCalendar's exclusive end for allDay selection: subtract one day if provided
+                                                                    var endStr = selInfo.end ? new Date(selInfo.end.getTime()-86400000).toISOString().slice(0,10) : selInfo.startStr.slice(0,10);
+                                                                    document.getElementById('eventEnd').value = endStr;
+                                                                    document.getElementById('eventId').value = '';
+                                                                    window.currentCalendarEvent = null; // indicates new
+                                                                    $('#editEventModal').modal('show');
+                                                                },
                                                                 eventClick: function(info) {
                                                                     var event = info.event;
                                                                     document.getElementById('eventTitle').value = event.title;
@@ -395,7 +602,6 @@ document.addEventListener('DOMContentLoaded', function() {
                                                                     $('#editEventModal').modal('show');
                                                                     window.currentCalendarEvent = event;
                                                                 },
-                                                                editable: true,
                                                                 eventDrop: function(info) {
                                                                     var event = info.event;
                                                                     var id = document.getElementById('eventId').value || event.id || event.title;
@@ -416,6 +622,19 @@ document.addEventListener('DOMContentLoaded', function() {
                                                                             alert('Error updating event.');
                                                                         }
                                                                     });
+                                                                },
+                                                                eventResize: function(info){
+                                                                    var event = info.event;
+                                                                    var id = event.id;
+                                                                    fetch('/update_gantt_task', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            id: id,
+                                                                            start: event.startStr,
+                                                                            end: event.endStr || event.startStr
+                                                                        })
+                                                                    }).then(r=>{ if(!r.ok) alert('Resize failed'); });
                                                                 }
                                                             });
                                                         // Show empty message if no events
@@ -428,42 +647,34 @@ document.addEventListener('DOMContentLoaded', function() {
                                                         }
                                                         document.getElementById('saveEventBtn').onclick = function() {
                                                             var event = window.currentCalendarEvent;
-                                                            if(!event) return;
                                                             var newTitle = document.getElementById('eventTitle').value;
                                                             var newStart = document.getElementById('eventStart').value;
                                                             var newEnd = document.getElementById('eventEnd').value || newStart;
-                                                            var id = document.getElementById('eventId').value;
-                                                            event.setProp('title', newTitle);
-                                                            event.setStart(newStart);
-                                                            event.setEnd(newEnd);
-                                                            if (!(id.startsWith('phase-') || id.startsWith('item-'))) {
-                                                                if (newTitle.startsWith('Phase: ')) {
-                                                                    id = 'phase-' + newTitle.replace('Phase: ', '').split(' ')[0];
-                                                                } else if (newTitle.startsWith('Item: ')) {
-                                                                    id = 'item-' + newTitle.replace('Item: ', '').split(' ')[0];
-                                                                }
+                                                            if(event){
+                                                                var id = event.id;
+                                                                // Update existing
+                                                                event.setProp('title', newTitle);
+                                                                event.setStart(newStart);
+                                                                event.setEnd(newEnd);
+                                                                fetch('/update_gantt_task', {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({ id: id, start: newStart, end: newEnd, title:newTitle })
+                                                                }).then(res => { if(!res.ok) alert('Error updating event'); else $('#editEventModal').modal('hide'); });
+                                                            } else {
+                                                                // Create a new ad-hoc event only in UI (not persisted if no id pattern)
+                                                                var tempId = newTitle.startsWith('Phase: ')? 'phase-' + newTitle.replace('Phase: ','').replace(/\s+/g,'-') : newTitle.startsWith('Item: ')? 'item-' + newTitle.replace('Item: ','').replace(/\s+/g,'-') : 'evt-' + Date.now();
+                                                                window._calendarInstance.addEvent({ id: tempId, title:newTitle, start:newStart, end:newEnd, color: newTitle.startsWith('Phase: ')? '#FF8200':'#4B4B4B' });
+                                                                $('#editEventModal').modal('hide');
                                                             }
-                                                            fetch('/update_gantt_task', {
-                                                                method: 'POST',
-                                                                headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({
-                                                                    id: id,
-                                                                    start: newStart,
-                                                                    end: newEnd
-                                                                })
-                                                            }).then(res => {
-                                                                if(res.ok) {
-                                                                    $('#editEventModal').modal('hide');
-                                                                    location.reload();
-                                                                } else {
-                                                                    alert('Error updating event.');
-                                                                }
-                                                            });
+                                                            document.getElementById('eventId').value='';
+                                                            window.currentCalendarEvent=null;
                             };
                         }); // Close DOMContentLoaded listener
                 </script>
             </div>
-        </div>
+                    </div>
+                </div>
     </div>
     <div id="image-modal" class="modal" onclick="closeModal(event)">
     <!-- Modal removed: images now display in viewer section -->
@@ -487,13 +698,73 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         // Image viewer logic
         function showFullImage(src) {
-            document.getElementById('full-image').src = src;
-            document.getElementById('full-image-container').style.display = 'block';
+            const cont = document.getElementById('full-image-container');
+            const img = document.getElementById('full-image');
+            const ph = document.getElementById('placeholder-text');
+            const closeBtn = document.getElementById('close-full-image');
+            img.src = src;
+            img.style.display = 'block';
+            closeBtn.style.display = 'inline-block';
+            if (ph) ph.style.display = 'none';
+            cont.classList.remove('empty');
         }
         function hideFullImage() {
-            document.getElementById('full-image').src = '';
-            document.getElementById('full-image-container').style.display = 'none';
+            const cont = document.getElementById('full-image-container');
+            const img = document.getElementById('full-image');
+            const ph = document.getElementById('placeholder-text');
+            const closeBtn = document.getElementById('close-full-image');
+            img.src = '';
+            img.style.display = 'none';
+            closeBtn.style.display = 'none';
+            if (ph) ph.style.display = 'block';
+            cont.classList.add('empty');
         }
+        // --- Image viewer resize logic ---
+        (function(){
+            const panel = document.getElementById('image-viewer-panel');
+            const handle = document.getElementById('viewer-resize-handle');
+            if(!panel || !handle) return;
+            let startX = 0; let startW = 0; let dragging = false;
+            const MIN_W = 260; const MAX_W = 720; const DEFAULT_W = 380;
+            function pxToNum(v){ return parseFloat(String(v).replace('px','')) || 0; }
+            function onMouseMove(e){
+                if(!dragging) return;
+                const dx = e.clientX - startX;
+                let w = Math.min(MAX_W, Math.max(MIN_W, startW + dx));
+                panel.style.width = w + 'px';
+            }
+            function stop(){
+                if(!dragging) return;
+                dragging = false;
+                document.documentElement.classList.remove('resizing');
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', stop);
+            }
+            handle.addEventListener('mousedown', e=>{
+                startX = e.clientX;
+                startW = panel.getBoundingClientRect().width;
+                dragging = true;
+                document.documentElement.classList.add('resizing');
+                window.addEventListener('mousemove', onMouseMove);
+                window.addEventListener('mouseup', stop);
+                e.preventDefault();
+            });
+            handle.addEventListener('dblclick', ()=>{ panel.style.width = DEFAULT_W + 'px'; });
+            // Touch support
+            handle.addEventListener('touchstart', e=>{
+                const t = e.touches[0];
+                startX = t.clientX; startW = panel.getBoundingClientRect().width; dragging = true;
+                document.documentElement.classList.add('resizing');
+                window.addEventListener('touchmove', onTouchMove, {passive:false});
+                window.addEventListener('touchend', stopTouch, {passive:false});
+            }, {passive:false});
+            function onTouchMove(e){
+                if(!dragging) return; const t = e.touches[0];
+                const dx = t.clientX - startX; let w = Math.min(MAX_W, Math.max(MIN_W, startW + dx));
+                panel.style.width = w + 'px'; e.preventDefault();
+            }
+            function stopTouch(){ dragging=false; document.documentElement.classList.remove('resizing'); window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', stopTouch); }
+        })();
         function openEditModal(type, id, title, start, duration, milestone, internal_external, dependencies) {
             event.stopPropagation();
             let formHtml = '';
