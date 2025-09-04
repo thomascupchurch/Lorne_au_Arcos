@@ -1,9 +1,21 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
+    <style>
+        .gantt .bar {
+            fill: #FF8200 !important;
+            stroke: #FF8200 !important;
+        }
+        .gantt .bar.external-bar {
+            fill: #4B4B4B !important;
+            stroke: #4B4B4B !important;
+        }
+    </style>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Project Planning App MVP</title>
+    <link rel="stylesheet" href="https://unpkg.com/frappe-gantt@0.5.0/dist/frappe-gantt.css">
+    <script src="https://unpkg.com/frappe-gantt@0.5.0/dist/frappe-gantt.min.js"></script>
     <style>
         body { margin: 0; font-family: Arial, sans-serif; }
         .container { display: flex; height: 100vh; }
@@ -166,7 +178,7 @@
                                         <div>
                                             {% for img in phase.images %}
                                                 <span style="display:inline-block;position:relative;">
-                                                    <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                    <img src="{{ url_for('main.uploaded_file', filename=img.filename) }}" class="thumbnail" title="{{ img.filename }}">
                                                     <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
                                                         <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
                                                     </form>
@@ -196,7 +208,7 @@
                                                 <div>
                                                     {% for img in item.images %}
                                                         <span style="display:inline-block;position:relative;">
-                                                            <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                            <img src="{{ url_for('main.uploaded_file', filename=img.filename) }}" class="thumbnail" title="{{ img.filename }}">
                                                             <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
                                                                 <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
                                                             </form>
@@ -226,7 +238,7 @@
                                                         <div>
                                                             {% for img in subitem.images %}
                                                                 <span style="display:inline-block;position:relative;">
-                                                                    <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                                    <img src="{{ url_for('main.uploaded_file', filename=img.filename) }}" class="thumbnail" title="{{ img.filename }}">
                                                                     <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
                                                                         <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
                                                                     </form>
@@ -247,33 +259,112 @@
                     {% endfor %}
                 </div>
                 <div id="planning-view">
-                    <div id="gantt-view" style="display:none;">
+                    <div id="gantt-view" style="display:block;">
                         <h3>Gantt Chart</h3>
-                        <div id="gantt-chart"></div>
-                        <script src="https://cdn.jsdelivr.net/npm/frappe-gantt/dist/frappe-gantt.min.js"></script>
-                        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt/dist/frappe-gantt.css">
-                        <script>
-                            var ganttTasks = {{ gantt_json|safe }};
-                        function renderGantt() {
-                            var gantt = new Gantt("#gantt-chart", ganttTasks, {
-                                view_mode: 'Day',
-                                custom_popup_html: null
-                            });
-                        }
-                        document.addEventListener('DOMContentLoaded', function() {
-                            if(document.getElementById('gantt-view').style.display === 'block') {
-                                renderGantt();
-                            }
-                        });
-                        window.showView = (function(orig){
-                            return function(view) {
-                                orig(view);
-                                if(view === 'gantt') {
-                                    setTimeout(renderGantt, 100);
-                                }
-                            }
-                        })(window.showView || function(view){});
-                        </script>
+                        <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff;"></div>
+                    </div>
+<script>
+var ganttTasks = JSON.parse('{{ gantt_json_js|safe }}');
+function renderGantt() {
+    console.log('Gantt tasks:', ganttTasks);
+    try {
+        console.log('Gantt constructor:', typeof Gantt);
+    } catch (e) {
+        console.error('Gantt not defined:', e);
+    }
+    if (!ganttTasks || ganttTasks.length === 0) {
+        document.getElementById('gantt-chart').innerHTML = '<p style="text-align:center;line-height:400px;">No tasks to display</p>';
+        return;
+    }
+    if (typeof Gantt !== 'function') {
+        document.getElementById('gantt-chart').innerHTML = '<p style="color:red;text-align:center;">Gantt library not loaded</p>';
+        return;
+    }
+    var gantt = new Gantt("#gantt-chart", ganttTasks, {
+        view_mode: 'Day',
+        custom_popup_html: null,
+        on_date_change: function(task, start, end) {
+            // Send AJAX request to update start/end in backend
+            fetch('/update_gantt_task', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    id: task.id,
+                    start: start.toISOString().slice(0,10),
+                    end: end.toISOString().slice(0,10)
+                })
+            }).then(res => {
+                if(res.ok) {
+                    location.reload();
+                } else {
+                    alert('Error updating task.');
+                }
+            });
+        }
+    });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    renderGantt();
+});
+</script>
+<script>
+function getGanttTasks() {
+    try {
+        return JSON.parse(document.getElementById('gantt-data').textContent);
+    } catch (e) {
+        console.error('Error parsing Gantt JSON:', e);
+        return [];
+    }
+}
+function renderGantt() {
+    var ganttTasks = getGanttTasks();
+    console.log('Gantt tasks:', ganttTasks);
+    try {
+        console.log('Gantt constructor:', typeof Gantt);
+    } catch (e) {
+        console.error('Gantt not defined:', e);
+    }
+    if (!ganttTasks || ganttTasks.length === 0) {
+        document.getElementById('gantt-chart').innerHTML = '<p style="text-align:center;line-height:400px;">No tasks to display</p>';
+        return;
+    }
+    if (typeof Gantt !== 'function') {
+        document.getElementById('gantt-chart').innerHTML = '<p style="color:red;text-align:center;">Gantt library not loaded</p>';
+        return;
+    }
+    var gantt = new Gantt("#gantt-chart", ganttTasks, {
+        view_mode: 'Day',
+        custom_popup_html: null,
+        on_date_change: function(task, start, end) {
+            // Send AJAX request to update start/end in backend
+            fetch('/update_gantt_task', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    id: task.id,
+                    start: start.toISOString().slice(0,10),
+                    end: end.toISOString().slice(0,10)
+                })
+            }).then(res => {
+                if(res.ok) {
+                    alert('Task updated!');
+                } else {
+                    alert('Error updating task.');
+                }
+            });
+        }
+    });
+}
+document.addEventListener('DOMContentLoaded', function() {
+    renderGantt();
+});
+window.showView = (function(orig){
+    // Gantt view is always default; toggling is disabled for now
+</script>
                     </div>
                     <div id="calendar-view" style="display:none;">
                         <h3>Calendar View (Placeholder)</h3>

@@ -28,28 +28,33 @@ def index():
     for phase in phases:
         phase_start = phase.start_date if isinstance(phase.start_date, str) else str(phase.start_date)
         phase_end = (datetime.strptime(phase_start, '%Y-%m-%d') + timedelta(days=int(phase.duration))).strftime('%Y-%m-%d')
+        phase_class = 'phase-bar'
+        if getattr(phase, 'internal_external', None) == 'external':
+            phase_class += ' external-bar'
         gantt_tasks.append({
             'id': f'phase-{phase.id}',
             'name': f'Phase: {phase.title}',
             'start': phase_start,
             'end': phase_end,
             'progress': 0,
-            'custom_class': 'phase-bar'
+            'custom_class': phase_class
         })
         for item in phase.items:
             item_start = item.start_date if isinstance(item.start_date, str) else str(item.start_date)
             item_end = (datetime.strptime(item_start, '%Y-%m-%d') + timedelta(days=int(item.duration))).strftime('%Y-%m-%d')
+            item_class = 'item-bar'
+            if getattr(item, 'internal_external', None) == 'external':
+                item_class += ' external-bar'
             gantt_tasks.append({
                 'id': f'item-{item.id}',
                 'name': f'Item: {item.title}',
                 'start': item_start,
                 'end': item_end,
                 'progress': 0,
-                'custom_class': 'item-bar'
+                'custom_class': item_class
             })
-    gantt_json = json.dumps(gantt_tasks)
-    print('GANTT JSON:', gantt_json)
-    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, gantt_json=gantt_json)
+    gantt_json_js = json.dumps(gantt_tasks)
+    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, gantt_json_js=gantt_json_js)
 
 @main.route('/upload', methods=['POST'])
 @login_required
@@ -398,7 +403,7 @@ def init_sample_data():
     Project.query.delete()
     db.session.commit()
     # Create sample project
-    project = Project(title='Sample Project')
+    project = Project(title='Sample Project', owner_id=current_user.id)
     db.session.add(project)
     db.session.commit()
     # Create sample phases
@@ -419,6 +424,22 @@ def init_sample_data():
     db.session.add_all([subitem1, subitem2, subitem3])
     db.session.commit()
     # Add sample images (use placeholder images)
+    # Download placeholder images if not present
+    import requests
+    import os
+    img_urls = [
+        'https://via.placeholder.com/80x80.png?text=Sample1',
+        'https://via.placeholder.com/80x80.png?text=Sample2',
+        'https://via.placeholder.com/80x80.png?text=Sample3'
+    ]
+    img_files = ['sample1.png', 'sample2.png', 'sample3.png']
+    for url, fname in zip(img_urls, img_files):
+        fpath = os.path.join(current_app.root_path, 'uploads', fname)
+        if not os.path.exists(fpath):
+            r = requests.get(url)
+            if r.status_code == 200:
+                with open(fpath, 'wb') as f:
+                    f.write(r.content)
     img1 = Image(filename='sample1.png', item_id=item1.id)
     img2 = Image(filename='sample2.png', phase_id=phase2.id)
     img3 = Image(filename='sample3.png', subitem_id=subitem3.id)
@@ -426,3 +447,48 @@ def init_sample_data():
     db.session.commit()
     flash('Sample data initialized!')
     return redirect(url_for('main.index'))
+
+@main.route('/update_gantt_task', methods=['POST'])
+@login_required
+def update_gantt_task():
+    data = request.get_json()
+    tid = data.get('id')
+    start = data.get('start')
+    end = data.get('end')
+    duration = None
+    # Calculate duration from start and end
+    from datetime import datetime
+    try:
+        d1 = datetime.strptime(start, '%Y-%m-%d')
+        d2 = datetime.strptime(end, '%Y-%m-%d')
+        duration = (d2 - d1).days
+    except Exception:
+        return 'Invalid date', 400
+    # Update phase/item/subitem
+    updated = False
+    if tid.startswith('phase-'):
+        obj = Phase.query.get(int(tid.split('-')[1]))
+        if obj:
+            obj.start_date = start
+            obj.duration = duration
+            db.session.commit()
+            updated = True
+    elif tid.startswith('item-'):
+        obj = Item.query.get(int(tid.split('-')[1]))
+        if obj:
+            # Convert start to date object if needed
+            if isinstance(obj.start_date, str):
+                try:
+                    obj.start_date = datetime.strptime(start, '%Y-%m-%d').date()
+                except Exception:
+                    obj.start_date = start
+            else:
+                obj.start_date = datetime.strptime(start, '%Y-%m-%d').date()
+            obj.duration = duration
+            db.session.commit()
+            updated = True
+    # (Optional: add subitem support if needed)
+    print('GANTT UPDATE:', tid, start, end, duration, updated)
+    if updated:
+        return 'OK', 200
+    return 'Not found', 404
