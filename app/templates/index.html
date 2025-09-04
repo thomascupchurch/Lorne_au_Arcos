@@ -87,7 +87,7 @@
                         <option value="internal">Internal</option>
                         <option value="external">External</option>
                     </select>
-                    <select name="project-id" required>
+                    <select name="project-id" id="phase-parent-project" required>
                         <option value="">Select Project</option>
                         {% for project in projects %}
                         <option value="{{ project.id }}">{{ project.title }}</option>
@@ -106,7 +106,7 @@
                         <option value="internal">Internal</option>
                         <option value="external">External</option>
                     </select>
-                    <select name="phase-id" required>
+                    <select name="phase-id" id="item-parent-phase" required>
                         <option value="">Select Phase</option>
                         {% for phase in phases %}
                         <option value="{{ phase.id }}">{{ phase.title }}</option>
@@ -125,7 +125,7 @@
                         <option value="internal">Internal</option>
                         <option value="external">External</option>
                     </select>
-                    <select name="item-id" required>
+                    <select name="item-id" id="subitem-parent-item" required>
                         <option value="">Select Item</option>
                         {% for item in items %}
                         <option value="{{ item.id }}">{{ item.title }}</option>
@@ -165,7 +165,12 @@
                                     {% if phase.images %}
                                         <div>
                                             {% for img in phase.images %}
-                                                <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                <span style="display:inline-block;position:relative;">
+                                                    <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                    <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
+                                                        <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
+                                                    </form>
+                                                </span>
                                             {% endfor %}
                                         </div>
                                     {% endif %}
@@ -190,7 +195,12 @@
                                             {% if item.images %}
                                                 <div>
                                                     {% for img in item.images %}
-                                                        <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                        <span style="display:inline-block;position:relative;">
+                                                            <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                            <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
+                                                                <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
+                                                            </form>
+                                                        </span>
                                                     {% endfor %}
                                                 </div>
                                             {% endif %}
@@ -215,7 +225,12 @@
                                                     {% if subitem.images %}
                                                         <div>
                                                             {% for img in subitem.images %}
-                                                                <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                                <span style="display:inline-block;position:relative;">
+                                                                    <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                                    <form method="post" action="/delete_image/{{ img.id }}" style="position:absolute;top:0;right:0;">
+                                                                        <button type="submit" style="background:red;color:white;border:none;padding:2px 6px;font-size:10px;cursor:pointer;">&times;</button>
+                                                                    </form>
+                                                                </span>
                                                             {% endfor %}
                                                         </div>
                                                     {% endif %}
@@ -233,8 +248,32 @@
                 </div>
                 <div id="planning-view">
                     <div id="gantt-view" style="display:none;">
-                        <h3>Gantt Chart View (Placeholder)</h3>
-                        <p>Gantt chart will be rendered here.</p>
+                        <h3>Gantt Chart</h3>
+                        <div id="gantt-chart"></div>
+                        <script src="https://cdn.jsdelivr.net/npm/frappe-gantt/dist/frappe-gantt.min.js"></script>
+                        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt/dist/frappe-gantt.css">
+                        <script>
+                            var ganttTasks = {{ gantt_json|safe }};
+                        function renderGantt() {
+                            var gantt = new Gantt("#gantt-chart", ganttTasks, {
+                                view_mode: 'Day',
+                                custom_popup_html: null
+                            });
+                        }
+                        document.addEventListener('DOMContentLoaded', function() {
+                            if(document.getElementById('gantt-view').style.display === 'block') {
+                                renderGantt();
+                            }
+                        });
+                        window.showView = (function(orig){
+                            return function(view) {
+                                orig(view);
+                                if(view === 'gantt') {
+                                    setTimeout(renderGantt, 100);
+                                }
+                            }
+                        })(window.showView || function(view){});
+                        </script>
                     </div>
                     <div id="calendar-view" style="display:none;">
                         <h3>Calendar View (Placeholder)</h3>
@@ -246,6 +285,36 @@
                     </div>
                 </div>
                 <script>
+        // Persist last used parent for phase, item, and subitem creation
+        document.addEventListener('DOMContentLoaded', function() {
+            // Phase form: project parent
+            const phaseParent = document.getElementById('phase-parent-project');
+            if (phaseParent) {
+                const lastProject = localStorage.getItem('lastProjectId');
+                if (lastProject) phaseParent.value = lastProject;
+                phaseParent.addEventListener('change', function() {
+                    localStorage.setItem('lastProjectId', phaseParent.value);
+                });
+            }
+            // Item form: phase parent
+            const itemParent = document.getElementById('item-parent-phase');
+            if (itemParent) {
+                const lastPhase = localStorage.getItem('lastPhaseId');
+                if (lastPhase) itemParent.value = lastPhase;
+                itemParent.addEventListener('change', function() {
+                    localStorage.setItem('lastPhaseId', itemParent.value);
+                });
+            }
+            // Subitem form: item parent
+            const subitemParent = document.getElementById('subitem-parent-item');
+            if (subitemParent) {
+                const lastItem = localStorage.getItem('lastItemId');
+                if (lastItem) subitemParent.value = lastItem;
+                subitemParent.addEventListener('change', function() {
+                    localStorage.setItem('lastItemId', subitemParent.value);
+                });
+            }
+        });
                     function showView(view) {
                         document.getElementById('gantt-view').style.display = 'none';
                         document.getElementById('calendar-view').style.display = 'none';

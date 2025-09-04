@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, send_from_directory
+from flask import Blueprint, render_template, request, redirect, url_for, flash, send_from_directory, current_app
 import os
 from werkzeug.utils import secure_filename
 from app.models import db, User, Project, Phase, Item, SubItem, Image
@@ -21,7 +21,35 @@ def index():
     phases = Phase.query.all()
     items = Item.query.all()
     subitems = SubItem.query.all()
-    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems)
+    # Build Gantt chart data in Python
+    import json
+    from datetime import datetime, timedelta
+    gantt_tasks = []
+    for phase in phases:
+        phase_start = phase.start_date if isinstance(phase.start_date, str) else str(phase.start_date)
+        phase_end = (datetime.strptime(phase_start, '%Y-%m-%d') + timedelta(days=int(phase.duration))).strftime('%Y-%m-%d')
+        gantt_tasks.append({
+            'id': f'phase-{phase.id}',
+            'name': f'Phase: {phase.title}',
+            'start': phase_start,
+            'end': phase_end,
+            'progress': 0,
+            'custom_class': 'phase-bar'
+        })
+        for item in phase.items:
+            item_start = item.start_date if isinstance(item.start_date, str) else str(item.start_date)
+            item_end = (datetime.strptime(item_start, '%Y-%m-%d') + timedelta(days=int(item.duration))).strftime('%Y-%m-%d')
+            gantt_tasks.append({
+                'id': f'item-{item.id}',
+                'name': f'Item: {item.title}',
+                'start': item_start,
+                'end': item_end,
+                'progress': 0,
+                'custom_class': 'item-bar'
+            })
+    gantt_json = json.dumps(gantt_tasks)
+    print('GANTT JSON:', gantt_json)
+    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, gantt_json=gantt_json)
 
 @main.route('/upload', methods=['POST'])
 @login_required
@@ -304,6 +332,20 @@ def delete_subitem(subitem_id):
     flash('Sub-Item deleted!')
     return redirect(url_for('main.index'))
 
+@main.route('/delete_image/<int:image_id>', methods=['POST'])
+@login_required
+def delete_image(image_id):
+    img = Image.query.get_or_404(image_id)
+    # Remove file from disk
+    import os
+    file_path = os.path.join(current_app.root_path, 'uploads', img.filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+    # Remove from DB
+    db.session.delete(img)
+    db.session.commit()
+    return redirect(request.referrer or url_for('main.index'))
+
 @main.route('/export_project/<int:project_id>')
 @login_required
 def export_project(project_id):
@@ -344,3 +386,43 @@ def export_project(project_id):
                             zipf.write(img_path, f'images/{img.filename}')
     zip_buffer.seek(0)
     return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name=f'project_{project.id}_export.zip')
+
+@main.route('/init_sample_data')
+@login_required
+def init_sample_data():
+    # Remove all existing data
+    Image.query.delete()
+    SubItem.query.delete()
+    Item.query.delete()
+    Phase.query.delete()
+    Project.query.delete()
+    db.session.commit()
+    # Create sample project
+    project = Project(title='Sample Project')
+    db.session.add(project)
+    db.session.commit()
+    # Create sample phases
+    phase1 = Phase(title='Design', start_date='2025-09-01', duration=10, is_milestone=False, internal_external='internal', project_id=project.id)
+    phase2 = Phase(title='Build', start_date='2025-09-11', duration=15, is_milestone=True, internal_external='external', project_id=project.id)
+    db.session.add_all([phase1, phase2])
+    db.session.commit()
+    # Create sample items
+    item1 = Item(title='Wireframes', start_date='2025-09-01', duration=5, dependencies='', is_milestone=False, internal_external='internal', phase_id=phase1.id)
+    item2 = Item(title='Blueprints', start_date='2025-09-06', duration=5, dependencies='', is_milestone=True, internal_external='external', phase_id=phase1.id)
+    item3 = Item(title='Foundation', start_date='2025-09-11', duration=7, dependencies='', is_milestone=False, internal_external='internal', phase_id=phase2.id)
+    db.session.add_all([item1, item2, item3])
+    db.session.commit()
+    # Create sample sub-items
+    subitem1 = SubItem(title='Sketch', start_date='2025-09-01', duration=2, dependencies='', is_milestone=False, internal_external='internal', item_id=item1.id)
+    subitem2 = SubItem(title='CAD', start_date='2025-09-03', duration=3, dependencies='', is_milestone=True, internal_external='external', item_id=item1.id)
+    subitem3 = SubItem(title='Pour Concrete', start_date='2025-09-11', duration=3, dependencies='', is_milestone=False, internal_external='internal', item_id=item3.id)
+    db.session.add_all([subitem1, subitem2, subitem3])
+    db.session.commit()
+    # Add sample images (use placeholder images)
+    img1 = Image(filename='sample1.png', item_id=item1.id)
+    img2 = Image(filename='sample2.png', phase_id=phase2.id)
+    img3 = Image(filename='sample3.png', subitem_id=subitem3.id)
+    db.session.add_all([img1, img2, img3])
+    db.session.commit()
+    flash('Sample data initialized!')
+    return redirect(url_for('main.index'))
