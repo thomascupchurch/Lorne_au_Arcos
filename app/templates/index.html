@@ -23,6 +23,16 @@
         .modal-close {
             position: absolute; top: 20px; right: 40px; color: #fff; font-size: 2em; cursor: pointer;
         }
+        .modal-edit {
+            display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+        }
+        .modal-edit-content {
+            background: #fff; padding: 2em; border-radius: 8px; min-width: 300px; max-width: 90vw;
+        }
+        .modal-edit-close {
+            position: absolute; top: 20px; right: 40px; color: #222; font-size: 2em; cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -127,9 +137,31 @@
                     <h3>Project Hierarchy</h3>
                     {% for project in projects %}
                         <div><strong>Project:</strong> {{ project.title }}
+                            <a href="/export_project/{{ project.id }}" style="margin-left:1em;">Export</a>
+                            <form method="post" action="/edit_project/{{ project.id }}">
+                                <input type="text" name="project-title" value="{{ project.title }}" required>
+                                <button type="submit">Edit</button>
+                            </form>
+                            <form method="post" action="/delete_project/{{ project.id }}" onsubmit="return confirm('Delete this project and all its contents?');">
+                                <button type="submit" style="color:red;">Delete</button>
+                            </form>
                             <ul>
                             {% for phase in project.phases %}
                                 <li><strong>Phase:</strong> {{ phase.title }}
+                                    <form method="post" action="/edit_phase/{{ phase.id }}">
+                                        <input type="text" name="phase-title" value="{{ phase.title }}" required>
+                                        <input type="date" name="phase-start" value="{{ phase.start_date }}" required>
+                                        <input type="number" name="phase-duration" value="{{ phase.duration }}" required>
+                                        <label><input type="checkbox" name="phase-milestone" {% if phase.is_milestone %}checked{% endif %}> Milestone</label>
+                                        <select name="phase-type">
+                                            <option value="internal" {% if phase.internal_external == 'internal' %}selected{% endif %}>Internal</option>
+                                            <option value="external" {% if phase.internal_external == 'external' %}selected{% endif %}>External</option>
+                                        </select>
+                                        <button type="submit">Edit</button>
+                                    </form>
+                                    <form method="post" action="/delete_phase/{{ phase.id }}" onsubmit="return confirm('Delete this phase and all its items?');">
+                                        <button type="submit" style="color:red;">Delete</button>
+                                    </form>
                                     {% if phase.images %}
                                         <div>
                                             {% for img in phase.images %}
@@ -140,6 +172,21 @@
                                     <ul>
                                     {% for item in phase.items %}
                                         <li><strong>Item:</strong> {{ item.title }}
+                                            <form method="post" action="/edit_item/{{ item.id }}">
+                                                <input type="text" name="item-title" value="{{ item.title }}" required>
+                                                <input type="date" name="item-start" value="{{ item.start_date }}" required>
+                                                <input type="number" name="item-duration" value="{{ item.duration }}" required>
+                                                <input type="text" name="item-dependencies" value="{{ item.dependencies }}">
+                                                <label><input type="checkbox" name="item-milestone" {% if item.is_milestone %}checked{% endif %}> Milestone</label>
+                                                <select name="item-type">
+                                                    <option value="internal" {% if item.internal_external == 'internal' %}selected{% endif %}>Internal</option>
+                                                    <option value="external" {% if item.internal_external == 'external' %}selected{% endif %}>External</option>
+                                                </select>
+                                                <button type="submit">Edit</button>
+                                            </form>
+                                            <form method="post" action="/delete_item/{{ item.id }}" onsubmit="return confirm('Delete this item and all its sub-items?');">
+                                                <button type="submit" style="color:red;">Delete</button>
+                                            </form>
                                             {% if item.images %}
                                                 <div>
                                                     {% for img in item.images %}
@@ -150,6 +197,21 @@
                                             <ul>
                                             {% for subitem in item.subitems %}
                                                 <li><strong>Sub-Item:</strong> {{ subitem.title }}
+                                                    <form method="post" action="/edit_subitem/{{ subitem.id }}">
+                                                        <input type="text" name="subitem-title" value="{{ subitem.title }}" required>
+                                                        <input type="date" name="subitem-start" value="{{ subitem.start_date }}" required>
+                                                        <input type="number" name="subitem-duration" value="{{ subitem.duration }}" required>
+                                                        <input type="text" name="subitem-dependencies" value="{{ subitem.dependencies }}">
+                                                        <label><input type="checkbox" name="subitem-milestone" {% if subitem.is_milestone %}checked{% endif %}> Milestone</label>
+                                                        <select name="subitem-type">
+                                                            <option value="internal" {% if subitem.internal_external == 'internal' %}selected{% endif %}>Internal</option>
+                                                            <option value="external" {% if subitem.internal_external == 'external' %}selected{% endif %}>External</option>
+                                                        </select>
+                                                        <button type="submit">Edit</button>
+                                                    </form>
+                                                    <form method="post" action="/delete_subitem/{{ subitem.id }}" onsubmit="return confirm('Delete this sub-item?');">
+                                                        <button type="submit" style="color:red;">Delete</button>
+                                                    </form>
                                                     {% if subitem.images %}
                                                         <div>
                                                             {% for img in subitem.images %}
@@ -200,6 +262,12 @@
         <span class="modal-close" onclick="closeModal(event)">&times;</span>
         <img id="modal-img" class="modal-content" src="" alt="Full Size Image">
     </div>
+    <div id="modal-edit" class="modal-edit" onclick="closeEditModal(event)">
+        <span class="modal-edit-close" onclick="closeEditModal(event)">&times;</span>
+        <div class="modal-edit-content" id="modal-edit-content">
+            <!-- Modal form will be injected here -->
+        </div>
+    </div>
     <script>
         function toggleDarkMode() {
             document.body.classList.toggle('darkmode');
@@ -226,6 +294,66 @@
             if(event.target.classList.contains('modal') || event.target.classList.contains('modal-close')) {
                 document.getElementById('image-modal').style.display = 'none';
                 document.getElementById('modal-img').src = '';
+            }
+        }
+        function openEditModal(type, id, title, start, duration, milestone, internal_external, dependencies) {
+            event.stopPropagation();
+            let formHtml = '';
+            if(type === 'project') {
+                formHtml = `<form method='post' action='/edit_project/${id}'>
+                    <h3>Edit Project</h3>
+                    <input type='text' name='project-title' value='${title}' required><br>
+                    <button type='submit'>Save</button>
+                </form>`;
+            } else if(type === 'phase') {
+                formHtml = `<form method='post' action='/edit_phase/${id}'>
+                    <h3>Edit Phase</h3>
+                    <input type='text' name='phase-title' value='${title}' required><br>
+                    <input type='date' name='phase-start' value='${start}' required><br>
+                    <input type='number' name='phase-duration' value='${duration}' required><br>
+                    <label><input type='checkbox' name='phase-milestone' ${milestone==='true'?'checked':''}> Milestone</label><br>
+                    <select name='phase-type'>
+                        <option value='internal' ${internal_external==='internal'?'selected':''}>Internal</option>
+                        <option value='external' ${internal_external==='external'?'selected':''}>External</option>
+                    </select><br>
+                    <button type='submit'>Save</button>
+                </form>`;
+            } else if(type === 'item') {
+                formHtml = `<form method='post' action='/edit_item/${id}'>
+                    <h3>Edit Item</h3>
+                    <input type='text' name='item-title' value='${title}' required><br>
+                    <input type='date' name='item-start' value='${start}' required><br>
+                    <input type='number' name='item-duration' value='${duration}' required><br>
+                    <input type='text' name='item-dependencies' value='${dependencies||''}'><br>
+                    <label><input type='checkbox' name='item-milestone' ${milestone==='true'?'checked':''}> Milestone</label><br>
+                    <select name='item-type'>
+                        <option value='internal' ${internal_external==='internal'?'selected':''}>Internal</option>
+                        <option value='external' ${internal_external==='external'?'selected':''}>External</option>
+                    </select><br>
+                    <button type='submit'>Save</button>
+                </form>`;
+            } else if(type === 'subitem') {
+                formHtml = `<form method='post' action='/edit_subitem/${id}'>
+                    <h3>Edit Sub-Item</h3>
+                    <input type='text' name='subitem-title' value='${title}' required><br>
+                    <input type='date' name='subitem-start' value='${start}' required><br>
+                    <input type='number' name='subitem-duration' value='${duration}' required><br>
+                    <input type='text' name='subitem-dependencies' value='${dependencies||''}'><br>
+                    <label><input type='checkbox' name='subitem-milestone' ${milestone==='true'?'checked':''}> Milestone</label><br>
+                    <select name='subitem-type'>
+                        <option value='internal' ${internal_external==='internal'?'selected':''}>Internal</option>
+                        <option value='external' ${internal_external==='external'?'selected':''}>External</option>
+                    </select><br>
+                    <button type='submit'>Save</button>
+                </form>`;
+            }
+            document.getElementById('modal-edit-content').innerHTML = formHtml;
+            document.getElementById('modal-edit').style.display = 'flex';
+        }
+        function closeEditModal(event) {
+            if(event.target.classList.contains('modal-edit') || event.target.classList.contains('modal-edit-close')) {
+                document.getElementById('modal-edit').style.display = 'none';
+                document.getElementById('modal-edit-content').innerHTML = '';
             }
         }
     </script>

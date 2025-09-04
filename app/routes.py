@@ -4,6 +4,11 @@ from werkzeug.utils import secure_filename
 from app.models import db, User, Project, Phase, Item, SubItem, Image
 from flask_login import login_required, current_user, login_user
 from werkzeug.security import check_password_hash, generate_password_hash
+from datetime import datetime, timedelta
+import csv
+import io
+import zipfile
+from flask import send_file
 
 main = Blueprint('main', __name__, url_prefix='')
 UPLOAD_FOLDER = 'uploads'
@@ -82,7 +87,8 @@ def create_phase():
     internal_external = request.form.get('phase-type')
     project_id = request.form.get('project-id')
     if title and start_date and duration and project_id:
-        phase = Phase(title=title, start_date=start_date, duration=duration, is_milestone=is_milestone, internal_external=internal_external, project_id=project_id)
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        phase = Phase(title=title, start_date=start_date_obj, duration=duration, is_milestone=is_milestone, internal_external=internal_external, project_id=project_id)
         db.session.add(phase)
         db.session.commit()
         flash('Phase added!')
@@ -100,7 +106,8 @@ def create_item():
     internal_external = request.form.get('item-type')
     phase_id = request.form.get('phase-id')
     if title and start_date and duration and phase_id:
-        item = Item(title=title, start_date=start_date, duration=duration, dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, phase_id=phase_id)
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        item = Item(title=title, start_date=start_date_obj, duration=duration, dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, phase_id=phase_id)
         db.session.add(item)
         db.session.commit()
         flash('Item added!')
@@ -118,7 +125,8 @@ def create_subitem():
     internal_external = request.form.get('subitem-type')
     item_id = request.form.get('item-id')
     if title and start_date and duration and item_id:
-        subitem = SubItem(title=title, start_date=start_date, duration=duration, dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, item_id=item_id)
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        subitem = SubItem(title=title, start_date=start_date_obj, duration=duration, dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, item_id=item_id)
         db.session.add(subitem)
         db.session.commit()
         flash('Sub-Item added!')
@@ -178,3 +186,161 @@ def register():
         flash('Registration successful. Please log in.')
         return redirect(url_for('main.login'))
     return render_template('register.html')
+
+@main.route('/edit_project/<int:project_id>', methods=['POST'])
+@login_required
+def edit_project(project_id):
+    project = Project.query.get_or_404(project_id)
+    title = request.form.get('project-title')
+    if title:
+        project.title = title
+        db.session.commit()
+        flash('Project updated!')
+    return redirect(url_for('main.index'))
+
+@main.route('/edit_phase/<int:phase_id>', methods=['POST'])
+@login_required
+def edit_phase(phase_id):
+    phase = Phase.query.get_or_404(phase_id)
+    title = request.form.get('phase-title')
+    start_date = request.form.get('phase-start')
+    duration = request.form.get('phase-duration')
+    is_milestone = bool(request.form.get('phase-milestone'))
+    internal_external = request.form.get('phase-type')
+    if title and start_date and duration:
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        duration_int = int(duration)
+        phase.title = title
+        phase.start_date = start_date_obj
+        phase.duration = duration_int
+        phase.is_milestone = is_milestone
+        phase.internal_external = internal_external
+        # Cascade update: ensure all items fit within phase
+        phase_end = start_date_obj + timedelta(days=duration_int)
+        for item in phase.items:
+            # If item starts before phase, move it
+            if item.start_date < start_date_obj:
+                item.start_date = start_date_obj
+            # If item ends after phase, shorten duration
+            item_end = item.start_date + timedelta(days=int(item.duration))
+            if item_end > phase_end:
+                item.duration = (phase_end - item.start_date).days
+            # Cascade to subitems
+            item_end = item.start_date + timedelta(days=int(item.duration))
+            for subitem in item.subitems:
+                if subitem.start_date < item.start_date:
+                    subitem.start_date = item.start_date
+                subitem_end = subitem.start_date + timedelta(days=int(subitem.duration))
+                if subitem_end > item_end:
+                    subitem.duration = (item_end - subitem.start_date).days
+        db.session.commit()
+        flash('Phase updated and children validated!')
+    return redirect(url_for('main.index'))
+
+@main.route('/edit_item/<int:item_id>', methods=['POST'])
+@login_required
+def edit_item(item_id):
+    item = Item.query.get_or_404(item_id)
+    title = request.form.get('item-title')
+    start_date = request.form.get('item-start')
+    duration = request.form.get('item-duration')
+    dependencies = request.form.get('item-dependencies')
+    is_milestone = bool(request.form.get('item-milestone'))
+    internal_external = request.form.get('item-type')
+    if title and start_date and duration:
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        duration_int = int(duration)
+        item.title = title
+        item.start_date = start_date_obj
+        item.duration = duration_int
+        item.dependencies = dependencies
+        item.is_milestone = is_milestone
+        item.internal_external = internal_external
+        # Cascade update: ensure all subitems fit within item
+        item_end = start_date_obj + timedelta(days=duration_int)
+        for subitem in item.subitems:
+            if subitem.start_date < start_date_obj:
+                subitem.start_date = start_date_obj
+            subitem_end = subitem.start_date + timedelta(days=int(subitem.duration))
+            if subitem_end > item_end:
+                subitem.duration = (item_end - subitem.start_date).days
+        db.session.commit()
+        flash('Item updated and children validated!')
+    return redirect(url_for('main.index'))
+
+@main.route('/delete_project/<int:project_id>', methods=['POST'])
+@login_required
+def delete_project(project_id):
+    project = Project.query.get_or_404(project_id)
+    db.session.delete(project)
+    db.session.commit()
+    flash('Project deleted!')
+    return redirect(url_for('main.index'))
+
+@main.route('/delete_phase/<int:phase_id>', methods=['POST'])
+@login_required
+def delete_phase(phase_id):
+    phase = Phase.query.get_or_404(phase_id)
+    db.session.delete(phase)
+    db.session.commit()
+    flash('Phase deleted!')
+    return redirect(url_for('main.index'))
+
+@main.route('/delete_item/<int:item_id>', methods=['POST'])
+@login_required
+def delete_item(item_id):
+    item = Item.query.get_or_404(item_id)
+    db.session.delete(item)
+    db.session.commit()
+    flash('Item deleted!')
+    return redirect(url_for('main.index'))
+
+@main.route('/delete_subitem/<int:subitem_id>', methods=['POST'])
+@login_required
+def delete_subitem(subitem_id):
+    subitem = SubItem.query.get_or_404(subitem_id)
+    db.session.delete(subitem)
+    db.session.commit()
+    flash('Sub-Item deleted!')
+    return redirect(url_for('main.index'))
+
+@main.route('/export_project/<int:project_id>')
+@login_required
+def export_project(project_id):
+    project = Project.query.get_or_404(project_id)
+    # Prepare CSV data
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Type', 'ID', 'Title', 'Start Date', 'Duration', 'Dependencies', 'Milestone', 'Internal/External', 'Parent ID'])
+    writer.writerow(['Project', project.id, project.title, '', '', '', '', '', ''])
+    for phase in project.phases:
+        writer.writerow(['Phase', phase.id, phase.title, phase.start_date, phase.duration, '', phase.is_milestone, phase.internal_external, project.id])
+        for item in phase.items:
+            writer.writerow(['Item', item.id, item.title, item.start_date, item.duration, item.dependencies, item.is_milestone, item.internal_external, phase.id])
+            for subitem in item.subitems:
+                writer.writerow(['SubItem', subitem.id, subitem.title, subitem.start_date, subitem.duration, subitem.dependencies, subitem.is_milestone, subitem.internal_external, item.id])
+    csv_bytes = io.BytesIO()
+    csv_bytes.write(output.getvalue().encode('utf-8'))
+    csv_bytes.seek(0)
+    # Prepare ZIP
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w') as zipf:
+        zipf.writestr('project_data.csv', csv_bytes.read())
+        # Add images
+        for phase in project.phases:
+            for img in phase.images:
+                img_path = os.path.join(UPLOAD_FOLDER, img.filename)
+                if os.path.exists(img_path):
+                    zipf.write(img_path, f'images/{img.filename}')
+            for item in phase.items:
+                for img in item.images:
+                    img_path = os.path.join(UPLOAD_FOLDER, img.filename)
+                    if os.path.exists(img_path):
+                        zipf.write(img_path, f'images/{img.filename}')
+                for subitem in item.subitems:
+                    for img in subitem.images:
+                        img_path = os.path.join(UPLOAD_FOLDER, img.filename)
+                        if os.path.exists(img_path):
+                            zipf.write(img_path, f'images/{img.filename}')
+    zip_buffer.seek(0)
+    return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name=f'project_{project.id}_export.zip')
