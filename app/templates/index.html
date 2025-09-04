@@ -120,12 +120,34 @@
                             <ul>
                             {% for phase in project.phases %}
                                 <li><strong>Phase:</strong> {{ phase.title }}
+                                    {% if phase.images %}
+                                        <div>
+                                            {% for img in phase.images %}
+                                                <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
                                     <ul>
                                     {% for item in phase.items %}
                                         <li><strong>Item:</strong> {{ item.title }}
+                                            {% if item.images %}
+                                                <div>
+                                                    {% for img in item.images %}
+                                                        <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                    {% endfor %}
+                                                </div>
+                                            {% endif %}
                                             <ul>
                                             {% for subitem in item.subitems %}
-                                                <li><strong>Sub-Item:</strong> {{ subitem.title }}</li>
+                                                <li><strong>Sub-Item:</strong> {{ subitem.title }}
+                                                    {% if subitem.images %}
+                                                        <div>
+                                                            {% for img in subitem.images %}
+                                                                <img src="/uploads/{{ img.filename }}" class="thumbnail" title="{{ img.filename }}">
+                                                            {% endfor %}
+                                                        </div>
+                                                    {% endif %}
+                                                </li>
                                             {% endfor %}
                                             </ul>
                                         </li>
