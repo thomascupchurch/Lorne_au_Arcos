@@ -2,9 +2,10 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 import os
 from werkzeug.utils import secure_filename
 from app.models import db, User, Project, Phase, Item, SubItem, Image
-from flask_login import login_required, current_user
+from flask_login import login_required, current_user, login_user
+from werkzeug.security import check_password_hash, generate_password_hash
 
-main = Blueprint('main', __name__)
+main = Blueprint('main', __name__, url_prefix='')
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 
@@ -144,3 +145,36 @@ def admin_users():
         return redirect(url_for('main.index'))
     users = User.query.all()
     return render_template('admin_users.html', users=users)
+
+@main.route('/login', methods=['GET', 'POST'], endpoint='login')
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password_hash, password):
+            login_user(user)
+            flash('Logged in successfully')
+            return redirect(url_for('main.index'))
+        else:
+            flash('Invalid credentials')
+            return redirect(url_for('main.login'))
+    return render_template('login.html')
+
+@main.route('/register', methods=['GET', 'POST'], endpoint='register')
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if not username or not password:
+            flash('Username and password required')
+            return redirect(url_for('main.register'))
+        if User.query.filter_by(username=username).first():
+            flash('Username already exists')
+            return redirect(url_for('main.register'))
+        user = User(username=username, password_hash=generate_password_hash(password))
+        db.session.add(user)
+        db.session.commit()
+        flash('Registration successful. Please log in.')
+        return redirect(url_for('main.login'))
+    return render_template('register.html')
