@@ -28,9 +28,7 @@ def index():
     for phase in phases:
         phase_start = phase.start_date if isinstance(phase.start_date, str) else str(phase.start_date)
         phase_end = (datetime.strptime(phase_start, '%Y-%m-%d') + timedelta(days=int(phase.duration))).strftime('%Y-%m-%d')
-        phase_class = 'phase-bar'
-        if getattr(phase, 'internal_external', None) == 'external':
-            phase_class += ' external-bar'
+        phase_class = 'external-bar' if getattr(phase, 'internal_external', None) == 'external' else 'phase-bar'
         gantt_tasks.append({
             'id': f'phase-{phase.id}',
             'name': f'Phase: {phase.title}',
@@ -42,9 +40,7 @@ def index():
         for item in phase.items:
             item_start = item.start_date if isinstance(item.start_date, str) else str(item.start_date)
             item_end = (datetime.strptime(item_start, '%Y-%m-%d') + timedelta(days=int(item.duration))).strftime('%Y-%m-%d')
-            item_class = 'item-bar'
-            if getattr(item, 'internal_external', None) == 'external':
-                item_class += ' external-bar'
+            item_class = 'external-bar' if getattr(item, 'internal_external', None) == 'external' else 'item-bar'
             gantt_tasks.append({
                 'id': f'item-{item.id}',
                 'name': f'Item: {item.title}',
@@ -54,7 +50,29 @@ def index():
                 'custom_class': item_class
             })
     gantt_json_js = json.dumps(gantt_tasks)
-    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, gantt_json_js=gantt_json_js)
+
+    # Build calendar events in Python
+    calendar_events = []
+    for phase in phases:
+        phase_start = phase.start_date if isinstance(phase.start_date, str) else str(phase.start_date)
+        phase_end = (datetime.strptime(phase_start, '%Y-%m-%d') + timedelta(days=int(phase.duration))).strftime('%Y-%m-%d')
+        calendar_events.append({
+            'title': f'Phase: {phase.title}',
+            'start': phase_start,
+            'end': phase_end,
+            'color': '#4B4B4B' if getattr(phase, 'internal_external', None) == 'external' else '#FF8200'
+        })
+        for item in phase.items:
+            item_start = item.start_date if isinstance(item.start_date, str) else str(item.start_date)
+            item_end = (datetime.strptime(item_start, '%Y-%m-%d') + timedelta(days=int(item.duration))).strftime('%Y-%m-%d')
+            calendar_events.append({
+                'title': f'Item: {item.title}',
+                'start': item_start,
+                'end': item_end,
+                'color': '#4B4B4B' if getattr(item, 'internal_external', None) == 'external' else '#FF8200'
+            })
+    calendar_events_json = json.dumps(calendar_events)
+    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, gantt_json_js=gantt_json_js, calendar_events_json=calendar_events_json)
 
 @main.route('/upload', methods=['POST'])
 @login_required
