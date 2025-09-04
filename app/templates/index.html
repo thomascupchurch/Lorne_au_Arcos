@@ -22,6 +22,24 @@
             <h2>Image Viewer</h2>
             <form action="/upload" method="post" enctype="multipart/form-data">
                 <input type="file" name="file" accept="image/png, image/jpeg, application/pdf">
+                <select name="association-type" required>
+                    <option value="">Associate With...</option>
+                    <option value="phase">Phase</option>
+                    <option value="item">Item</option>
+                    <option value="subitem">Sub-Item</option>
+                </select>
+                <select name="association-id" required>
+                    <option value="">Select...</option>
+                    {% for phase in phases %}
+                        <option value="phase-{{ phase.id }}">Phase: {{ phase.title }}</option>
+                    {% endfor %}
+                    {% for item in items %}
+                        <option value="item-{{ item.id }}">Item: {{ item.title }}</option>
+                    {% endfor %}
+                    {% for subitem in subitems %}
+                        <option value="subitem-{{ subitem.id }}">Sub-Item: {{ subitem.title }}</option>
+                    {% endfor %}
+                </select>
                 <button type="submit">Upload</button>
             </form>
             <div id="thumbnails"></div>
@@ -34,12 +52,12 @@
                 <button onclick="showView('timeline')">Timeline</button>
             </div>
             <div id="planning-ui">
-                <form id="project-form">
+                <form id="project-form" action="/create_project" method="post">
                     <h3>Create Project</h3>
                     <input type="text" name="project-title" placeholder="Project Title" required>
                     <button type="submit">Add Project</button>
                 </form>
-                <form id="phase-form">
+                <form id="phase-form" action="/create_phase" method="post">
                     <h3>Add Phase</h3>
                     <input type="text" name="phase-title" placeholder="Phase Title" required>
                     <input type="date" name="phase-start" required>
@@ -49,9 +67,15 @@
                         <option value="internal">Internal</option>
                         <option value="external">External</option>
                     </select>
+                    <select name="project-id" required>
+                        <option value="">Select Project</option>
+                        {% for project in projects %}
+                        <option value="{{ project.id }}">{{ project.title }}</option>
+                        {% endfor %}
+                    </select>
                     <button type="submit">Add Phase</button>
                 </form>
-                <form id="item-form">
+                <form id="item-form" action="/create_item" method="post">
                     <h3>Add Item</h3>
                     <input type="text" name="item-title" placeholder="Item Title" required>
                     <input type="date" name="item-start" required>
@@ -62,9 +86,15 @@
                         <option value="internal">Internal</option>
                         <option value="external">External</option>
                     </select>
+                    <select name="phase-id" required>
+                        <option value="">Select Phase</option>
+                        {% for phase in phases %}
+                        <option value="{{ phase.id }}">{{ phase.title }}</option>
+                        {% endfor %}
+                    </select>
                     <button type="submit">Add Item</button>
                 </form>
-                <form id="subitem-form">
+                <form id="subitem-form" action="/create_subitem" method="post">
                     <h3>Add Sub-Item</h3>
                     <input type="text" name="subitem-title" placeholder="Sub-Item Title" required>
                     <input type="date" name="subitem-start" required>
@@ -75,14 +105,62 @@
                         <option value="internal">Internal</option>
                         <option value="external">External</option>
                     </select>
+                    <select name="item-id" required>
+                        <option value="">Select Item</option>
+                        {% for item in items %}
+                        <option value="{{ item.id }}">{{ item.title }}</option>
+                        {% endfor %}
+                    </select>
                     <button type="submit">Add Sub-Item</button>
                 </form>
                 <div id="planning-hierarchy">
-                    <!-- Hierarchy will be rendered here -->
+                    <h3>Project Hierarchy</h3>
+                    {% for project in projects %}
+                        <div><strong>Project:</strong> {{ project.title }}
+                            <ul>
+                            {% for phase in project.phases %}
+                                <li><strong>Phase:</strong> {{ phase.title }}
+                                    <ul>
+                                    {% for item in phase.items %}
+                                        <li><strong>Item:</strong> {{ item.title }}
+                                            <ul>
+                                            {% for subitem in item.subitems %}
+                                                <li><strong>Sub-Item:</strong> {{ subitem.title }}</li>
+                                            {% endfor %}
+                                            </ul>
+                                        </li>
+                                    {% endfor %}
+                                    </ul>
+                                </li>
+                            {% endfor %}
+                            </ul>
+                        </div>
+                    {% endfor %}
                 </div>
                 <div id="planning-view">
-                    <!-- Gantt, calendar, timeline views will be rendered here -->
+                    <div id="gantt-view" style="display:none;">
+                        <h3>Gantt Chart View (Placeholder)</h3>
+                        <p>Gantt chart will be rendered here.</p>
+                    </div>
+                    <div id="calendar-view" style="display:none;">
+                        <h3>Calendar View (Placeholder)</h3>
+                        <p>Calendar will be rendered here.</p>
+                    </div>
+                    <div id="timeline-view" style="display:none;">
+                        <h3>Timeline View (Placeholder)</h3>
+                        <p>Timeline will be rendered here.</p>
+                    </div>
                 </div>
+                <script>
+                    function showView(view) {
+                        document.getElementById('gantt-view').style.display = 'none';
+                        document.getElementById('calendar-view').style.display = 'none';
+                        document.getElementById('timeline-view').style.display = 'none';
+                        if(view === 'gantt') document.getElementById('gantt-view').style.display = 'block';
+                        if(view === 'calendar') document.getElementById('calendar-view').style.display = 'block';
+                        if(view === 'timeline') document.getElementById('timeline-view').style.display = 'block';
+                    }
+                </script>
             </div>
         </div>
     </div>
