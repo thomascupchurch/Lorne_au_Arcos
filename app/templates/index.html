@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Planning App MVP</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        .container { display: flex; height: 100vh; }
+        .image-viewer { flex: 1; background: #222; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .planning-section { flex: 2; background: #f4f4f4; color: #222; padding: 2em; overflow-y: auto; }
+        .darkmode .image-viewer { background: #111; }
+        .darkmode .planning-section { background: #222; color: #eee; }
+        .toggle-dark { position: absolute; top: 10px; right: 10px; }
+        .thumbnail { width: 80px; height: 80px; object-fit: cover; margin: 5px; cursor: pointer; border: 2px solid #ccc; }
+    </style>
+</head>
+<body>
+    <button class="toggle-dark" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    <div class="container">
+        <div class="image-viewer">
+            <h2>Image Viewer</h2>
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" accept="image/png, image/jpeg, application/pdf">
+                <button type="submit">Upload</button>
+            </form>
+            <div id="thumbnails"></div>
+        </div>
+        <div class="planning-section">
+            <h2>Planning Section</h2>
+            <!-- Planning UI will go here -->
+            <div id="planning-ui"></div>
+        </div>
+    </div>
+    <script>
+        function toggleDarkMode() {
+            document.body.classList.toggle('darkmode');
+        }
+    </script>
+</body>
+</html>
