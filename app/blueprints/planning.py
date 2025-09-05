@@ -119,6 +119,86 @@ def compute_critical_path(phases, features, items):
         cur = predecessor.get(cur)
     return list(reversed(path))
 
+# -------------------- Helpers for JSON payloads/responses --------------------
+def _serialize_part(kind, obj):
+    if not obj:
+        return None
+    base = {
+        'id': obj.id,
+        'type': kind,
+        'title': getattr(obj, 'title', None),
+        'start': obj.start_date.strftime('%Y-%m-%d') if getattr(obj, 'start_date', None) else None,
+        'duration': getattr(obj, 'duration', None),
+        'dependencies': getattr(obj, 'dependencies', None),
+        'is_milestone': bool(getattr(obj, 'is_milestone', False)),
+        'internal_external': getattr(obj, 'internal_external', 'internal'),
+        'notes': getattr(obj, 'notes', None),
+    }
+    # parents
+    if kind == 'phase':
+        base['project_id'] = getattr(obj, 'project_id', None)
+    elif kind == 'feature':
+        base['phase_id'] = getattr(obj, 'phase_id', None)
+    elif kind == 'item':
+        base['feature_id'] = getattr(obj, 'feature_id', None)
+    return base
+
+def _build_task_for_obj(kind, obj):
+    if not obj:
+        return None
+    start = obj.start_date.strftime('%Y-%m-%d') if getattr(obj, 'start_date', None) else None
+    end = None
+    if getattr(obj, 'start_date', None) is not None:
+        try:
+            end = (obj.start_date + timedelta(days=getattr(obj, 'duration', 0))).strftime('%Y-%m-%d')
+        except Exception:
+            end = start
+    cls = f"{kind}-bar"
+    if getattr(obj, 'internal_external', 'internal') == 'external':
+        cls += ' external-bar'
+    # Minimal indicators for images and notes
+    try:
+        if hasattr(obj, 'images_multi') and obj.images_multi.count() > 0:
+            cls += ' has-images'
+    except Exception:
+        pass
+    if getattr(obj, 'notes', None):
+        cls += ' has-notes'
+    task = {
+        'id': f'{kind}-{obj.id}',
+        'name': f'{kind.capitalize()}: {getattr(obj,"title","")}',
+        'start': start,
+        'end': end,
+        'progress': 0,
+        'custom_class': cls
+    }
+    return task
+
+def _is_ajax():
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+@planning_bp.route('/get_part')
+@login_required
+def get_part():
+    """Return JSON details for a part (phase|feature|item) by id.
+
+    Query params: type=phase|feature|item, id=<int>
+    """
+    kind = request.args.get('type')
+    raw_id = request.args.get('id')
+    if kind not in ('phase', 'feature', 'item') or not (raw_id and raw_id.isdigit()):
+        return {'error': 'invalid parameters'}, 400
+    obj = None
+    if kind == 'phase':
+        obj = Phase.query.get(int(raw_id))
+    elif kind == 'feature':
+        obj = Feature.query.get(int(raw_id))
+    else:
+        obj = Item.query.get(int(raw_id))
+    if not obj:
+        return {'error': 'not found'}, 404
+    return {'status': 'ok', 'part': _serialize_part(kind, obj)}
+
 # -------------------- Placeholder endpoints being restored incrementally --------------------
 @planning_bp.route('/set_project', methods=['POST'])
 @login_required
@@ -190,11 +270,6 @@ def create_part():
 
     db.session.add(created)
     db.session.commit()
-    # Recompute critical path (rough) for response data
-    phases = Phase.query.filter_by(project_id=project_id).all() if project_id else Phase.query.all()
-    features = Feature.query.join(Phase).filter(Phase.project_id==project_id).all() if project_id else Feature.query.all()
-    leafs = Item.query.join(Feature).join(Phase).filter(Phase.project_id==project_id).all() if project_id else Item.query.all()
-    critical_ids = compute_critical_path(phases, features, leafs)
     resp_created = {
         'id': created.id,
         'type': ptype,
@@ -217,7 +292,7 @@ def create_part():
         'custom_class': custom_cls
     }
     if ajax:
-        return {'status':'ok','created':resp_created,'task':task,'critical_path':critical_ids}
+        return {'status':'ok','created':resp_created,'task':task}
     flash(f'{ptype.capitalize()} created')
     return redirect(url_for('planning.index'))
 
@@ -379,27 +454,20 @@ def promote_draft_auto():
     db.session.add(created)
     db.session.delete(draft)
     db.session.commit()
-    # critical path recompute limited to project scope when possible
-    phases = Phase.query.filter_by(project_id=project_id).all() if project_id else Phase.query.all()
-    features = Feature.query.join(Phase).filter(Phase.project_id==project_id).all() if project_id else Feature.query.all()
-    leafs = Item.query.join(Feature).join(Phase).filter(Phase.project_id==project_id).all() if project_id else Item.query.all()
-    critical_ids = compute_critical_path(phases, features, leafs)
     end_date = (created.start_date + timedelta(days=getattr(created,'duration',0))).strftime('%Y-%m-%d') if created.start_date else None
-    custom_cls = f"{inferred}-bar"
-    if getattr(created,'internal_external','internal') == 'external':
-        custom_cls += ' external-bar'
+    # classes handled by _build_task_for_obj for consistency
     task = {
         'id': f'{inferred}-{created.id}',
         'name': f'{inferred.capitalize()}: {created.title}',
         'start': created.start_date.strftime('%Y-%m-%d'),
         'end': end_date,
         'progress': 0,
-        'custom_class': custom_cls
+        'custom_class': _build_task_for_obj(inferred, created)['custom_class']
     }
     return {'status':'ok','created':{
                 'id': created.id, 'type': inferred, 'title': created.title,
                 'start': task['start'], 'duration': getattr(created,'duration',0)
-            }, 'task': task, 'critical_path': critical_ids, 'removed_draft_id': draft_id}
+            }, 'task': task, 'removed_draft_id': draft_id}
 
 # -------------------- Reorder Endpoints (Phase 2 migration) --------------------
 def _apply_new_positions(model, siblings, new_position):
@@ -532,19 +600,37 @@ def delete_project(project_id):
 @login_required
 def edit_phase(phase_id):
     ph = Phase.query.get_or_404(phase_id)
-    ph.title = (request.form.get('phase-title') or ph.title).strip()
-    try:
-        ph.start_date = datetime.strptime(request.form.get('phase-start'), '%Y-%m-%d').date()
-    except Exception:
-        pass
-    try:
-        ph.duration = int(request.form.get('phase-duration') or ph.duration)
-    except ValueError:
-        pass
-    ph.is_milestone = bool(request.form.get('phase-milestone'))
-    ph.internal_external = request.form.get('phase-type') or ph.internal_external
-    ph.notes = request.form.get('phase-notes') or ph.notes
+    is_json = request.is_json or _is_ajax()
+    data = request.get_json() if request.is_json else request.form
+    title = (data.get('phase-title') or data.get('title') or ph.title).strip()
+    ph.title = title
+    # date/duration
+    start_val = data.get('phase-start') or data.get('start')
+    if start_val:
+        try:
+            ph.start_date = datetime.strptime(start_val, '%Y-%m-%d').date()
+        except Exception:
+            pass
+    dur_val = data.get('phase-duration') or data.get('duration')
+    if dur_val is not None:
+        try:
+            ph.duration = int(dur_val)
+        except Exception:
+            pass
+    ms_flag = data.get('phase-milestone') if not request.is_json else data.get('is_milestone')
+    ph.is_milestone = bool(ms_flag)
+    ph.internal_external = data.get('phase-type') or data.get('internal_external') or ph.internal_external
+    ph.notes = data.get('phase-notes') or data.get('notes') or ph.notes
     db.session.commit()
+    if is_json:
+        project_id = session.get('selected_project_id')
+        cp, _, _, _ = _recompute_critical(project_id)
+        return {
+            'status': 'ok',
+            'part': _serialize_part('phase', ph),
+            'task': _build_task_for_obj('phase', ph),
+            'critical_path': cp
+        }
     return redirect(url_for('planning.index'))
 
 @planning_bp.route('/delete_phase/<int:phase_id>', methods=['POST'])
@@ -564,20 +650,37 @@ def delete_phase(phase_id):
 @login_required
 def edit_feature(feature_id):
     ft = Feature.query.get_or_404(feature_id)
-    ft.title = (request.form.get('feature-title') or ft.title).strip()
-    try:
-        ft.start_date = datetime.strptime(request.form.get('feature-start'), '%Y-%m-%d').date()
-    except Exception:
-        pass
-    try:
-        ft.duration = int(request.form.get('feature-duration') or ft.duration)
-    except ValueError:
-        pass
-    ft.dependencies = request.form.get('feature-dependencies') or ft.dependencies
-    ft.is_milestone = bool(request.form.get('feature-milestone'))
-    ft.internal_external = request.form.get('feature-type') or ft.internal_external
-    ft.notes = request.form.get('feature-notes') or ft.notes
+    is_json = request.is_json or _is_ajax()
+    data = request.get_json() if request.is_json else request.form
+    title = (data.get('feature-title') or data.get('title') or ft.title).strip()
+    ft.title = title
+    start_val = data.get('feature-start') or data.get('start')
+    if start_val:
+        try:
+            ft.start_date = datetime.strptime(start_val, '%Y-%m-%d').date()
+        except Exception:
+            pass
+    dur_val = data.get('feature-duration') or data.get('duration')
+    if dur_val is not None:
+        try:
+            ft.duration = int(dur_val)
+        except Exception:
+            pass
+    ft.dependencies = data.get('feature-dependencies') or data.get('dependencies') or ft.dependencies
+    ms_flag = data.get('feature-milestone') if not request.is_json else data.get('is_milestone')
+    ft.is_milestone = bool(ms_flag)
+    ft.internal_external = data.get('feature-type') or data.get('internal_external') or ft.internal_external
+    ft.notes = data.get('feature-notes') or data.get('notes') or ft.notes
     db.session.commit()
+    if is_json:
+        project_id = session.get('selected_project_id')
+        cp, _, _, _ = _recompute_critical(project_id)
+        return {
+            'status': 'ok',
+            'part': _serialize_part('feature', ft),
+            'task': _build_task_for_obj('feature', ft),
+            'critical_path': cp
+        }
     return redirect(url_for('planning.index'))
 
 @planning_bp.route('/delete_feature/<int:feature_id>', methods=['POST'])
@@ -595,20 +698,37 @@ def delete_feature(feature_id):
 @login_required
 def edit_item(item_id):
     it = Item.query.get_or_404(item_id)
-    it.title = (request.form.get('item-title') or it.title).strip()
-    try:
-        it.start_date = datetime.strptime(request.form.get('item-start'), '%Y-%m-%d').date()
-    except Exception:
-        pass
-    try:
-        it.duration = int(request.form.get('item-duration') or it.duration)
-    except ValueError:
-        pass
-    it.dependencies = request.form.get('item-dependencies') or it.dependencies
-    it.is_milestone = bool(request.form.get('item-milestone'))
-    it.internal_external = request.form.get('item-type') or it.internal_external
-    it.notes = request.form.get('item-notes') or it.notes
+    is_json = request.is_json or _is_ajax()
+    data = request.get_json() if request.is_json else request.form
+    title = (data.get('item-title') or data.get('title') or it.title).strip()
+    it.title = title
+    start_val = data.get('item-start') or data.get('start')
+    if start_val:
+        try:
+            it.start_date = datetime.strptime(start_val, '%Y-%m-%d').date()
+        except Exception:
+            pass
+    dur_val = data.get('item-duration') or data.get('duration')
+    if dur_val is not None:
+        try:
+            it.duration = int(dur_val)
+        except Exception:
+            pass
+    it.dependencies = data.get('item-dependencies') or data.get('dependencies') or it.dependencies
+    ms_flag = data.get('item-milestone') if not request.is_json else data.get('is_milestone')
+    it.is_milestone = bool(ms_flag)
+    it.internal_external = data.get('item-type') or data.get('internal_external') or it.internal_external
+    it.notes = data.get('item-notes') or data.get('notes') or it.notes
     db.session.commit()
+    if is_json:
+        project_id = session.get('selected_project_id')
+        cp, _, _, _ = _recompute_critical(project_id)
+        return {
+            'status': 'ok',
+            'part': _serialize_part('item', it),
+            'task': _build_task_for_obj('item', it),
+            'critical_path': cp
+        }
     return redirect(url_for('planning.index'))
 
 @planning_bp.route('/delete_item/<int:item_id>', methods=['POST'])
@@ -736,7 +856,7 @@ def update_gantt_task():
 
     # Cascade (features/items only) recompute earliest starts for dependents
     project_id = session.get('selected_project_id')
-    cp, phases, features, items = _recompute_critical(project_id)
+    cp, phases, features, items = [], *(_iter_project_parts(project_id))
     dependents_map = _build_dependency_graph(features, items)
     index_map = _index_objects(phases, features, items)
     adjustments = []
@@ -777,7 +897,7 @@ def update_gantt_task():
             start_numeric_ids.append(dep)
     if adjustments:
         db.session.commit()
-    return {'status':'ok','duration':duration,'critical_path':cp,'cascade':adjustments}
+    return {'status':'ok','duration':duration,'cascade':adjustments}
 
 @planning_bp.route('/')
 @login_required
@@ -795,8 +915,7 @@ def index():
         features = Feature.query.all()
         items = Item.query.all()
 
-    critical_path_ids = compute_critical_path(phases, features, items)
-    critical_set = set(critical_path_ids)
+    # Critical path removed from UI
 
     gantt_tasks = []
     for phase in phases:
@@ -805,22 +924,39 @@ def index():
         cls = 'phase-bar'
         if phase.internal_external == 'external':
             cls += ' external-bar'
-        if f'phase-{phase.id}' in critical_set:
-            cls += ' critical-path'
+        try:
+            if phase.images_multi.count() > 0:
+                cls += ' has-images'
+        except Exception:
+            pass
+        if phase.notes:
+            cls += ' has-notes'
         gantt_tasks.append({'id': f'phase-{phase.id}','name': f'Phase: {phase.title}','start': phase_start,'end': phase_end,'progress':0,'custom_class': cls})
         for feature in getattr(phase, 'features', []):
             f_start = feature.start_date.strftime('%Y-%m-%d') if feature.start_date else None
             f_end = (feature.start_date + timedelta(days=feature.duration)).strftime('%Y-%m-%d') if feature.start_date else None
             cls_f = 'feature-bar'
             if feature.internal_external=='external': cls_f += ' external-bar'
-            if f'feature-{feature.id}' in critical_set: cls_f += ' critical-path'
+            try:
+                if feature.images_multi.count() > 0:
+                    cls_f += ' has-images'
+            except Exception:
+                pass
+            if feature.notes:
+                cls_f += ' has-notes'
             gantt_tasks.append({'id': f'feature-{feature.id}','name': f'Feature: {feature.title}','start': f_start,'end': f_end,'progress':0,'custom_class': cls_f})
             for item in getattr(feature, 'items', []):
                 item_start = item.start_date.strftime('%Y-%m-%d') if item.start_date else None
                 item_end = (item.start_date + timedelta(days=item.duration)).strftime('%Y-%m-%d') if item.start_date else None
                 cls_i = 'item-bar'
                 if item.internal_external=='external': cls_i += ' external-bar'
-                if f'item-{item.id}' in critical_set: cls_i += ' critical-path'
+                try:
+                    if item.images_multi.count() > 0:
+                        cls_i += ' has-images'
+                except Exception:
+                    pass
+                if item.notes:
+                    cls_i += ' has-notes'
                 gantt_tasks.append({'id': f'item-{item.id}','name': f'Item: {item.title}','start': item_start,'end': item_end,'progress':0,'custom_class': cls_i})
 
     gantt_json_js = json.dumps(gantt_tasks)
@@ -854,11 +990,11 @@ def index():
                     active_usernames.append(uname)
         except Exception:
             pass
-    critical_filter_active = (session.get('critical_filter') == 'on')
+    critical_filter_active = False
     return render_template('index.html',
                            projects=projects, phases=phases, features=features, items=items,
                            images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js,
                            draft_json_js=draft_json_js, calendar_events_json=calendar_events_json,
-                           critical_path_ids=critical_path_ids, active_usernames=active_usernames,
+                           active_usernames=active_usernames,
                            critical_filter_active=critical_filter_active, selected_project_id=selected_project_id)
 

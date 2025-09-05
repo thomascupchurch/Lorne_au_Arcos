@@ -2,7 +2,7 @@
 
 - [x] Clarify Project Requirements
 - [x] Scaffold the Project
-- [ ] Customize the Project
+- [x] Customize the Project
 - [x] Install Required Extensions
 - [x] Compile the Project
 - [x] Create and Run Task
@@ -20,7 +20,7 @@ Implementation Progress:
 - [x] Verify file exists
 - [x] Clarify Project Requirements (added summary below; will expand README next)
 - [x] Scaffold the Project (VS Code tasks/launch added)
-- [ ] Customize the Project (restore planning advanced endpoints)
+- [x] Customize the Project (restore planning advanced endpoints; add inline edit JSON APIs and UI wiring)
 - [x] Install Required Extensions (Python, Pylance recommendations)
 - [x] Compile the Project (Compile task added)
 - [x] Create and Run Task (upgrade/run tasks + debugger)

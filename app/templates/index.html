@@ -24,8 +24,11 @@
     .gantt .bar.external-bar,
     .gantt .bar-wrapper.external-bar .bar { fill:#4B4B4B !important; stroke:#4B4B4B !important; }
     /* Remove previous opacity tiers for clear color fidelity */
-    /* Critical path bars: base orange. Additional hashed pattern applied dynamically when filter active */
-    .gantt .bar.critical-path { stroke:#FF8200 !important; fill:#FF8200 !important; stroke-width:2 !important; filter:drop-shadow(0 0 4px rgba(255,130,0,0.5)); }
+    /* Critical path visuals removed */
+    .gantt .bar.critical-path { display:none; }
+    /* Minimal visual indicators on bars */
+    .gantt .bar.has-images { stroke-dasharray: 4 2; }
+    .gantt .bar.has-notes { filter: drop-shadow(0 0 2px rgba(0,0,0,0.25)); }
     .img-badges span { transition:transform .15s ease, background .2s ease; cursor:default; }
     .img-badges span:hover { transform:scale(1.15); }
         /* Group band styling */
@@ -172,8 +175,7 @@
         }
     /* Planning section base (logos removed) */
     .planning-section { position:relative; }
-    /* (Moved critical-path styling into pattern-based rule above) */
-    .assoc-node.selected-node { outline:2px solid #FF8200; outline-offset:2px; border-radius:4px; }
+    /* (Critical-path & hierarchy node visuals removed) */
     .planning-section .planning-scroll { position:relative; z-index:1; }
     </style>
     <meta charset="UTF-8">
@@ -345,38 +347,22 @@
             </div>
             <div id="planning-view" style="margin-bottom:2em;">
                 <div id="gantt-view" style="display:block;">
-                                        <div style="display:flex;align-items:center;gap:1em;flex-wrap:wrap;">
-                                            <h3 style="margin:0;">Gantt Chart</h3>
-                                              <div id="critical-legend" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #ccc;padding:6px 10px;border-radius:10px;font-size:11px;">
-                                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FF8200;border-radius:3px;display:inline-block;border:1px solid #d96c00;"></span>Internal</span>
-                                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#4B4B4B;border-radius:3px;display:inline-block;border:1px solid #2f2f2f;"></span>External</span>
-                                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FF8200;border-radius:3px;display:inline-block;border:1px solid #d96c00;box-shadow:0 0 4px rgba(255,130,0,0.5);"></span>Critical</span>
-                                                <div style="margin-left:8px;display:flex;gap:6px;">
-                                                    <button type="button" id="btn-critical-only" style="background:#FF8200;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;">Show Critical Only</button>
-                                                    <button type="button" id="btn-critical-all" style="background:#666;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;display:none;">Show All</button>
-                                                  <a id="btn-critical-export" href="/export_critical_csv" style="background:#FF8200;color:#fff;padding:4px 10px;border-radius:6px;font-weight:600;font-size:11px;text-decoration:none;">Export CSV</a>
-                                                                                                    <div style="display:flex;align-items:center;gap:4px;">
-                                                                                                        <label style="font-size:10px;color:#333;display:flex;align-items:center;gap:2px;">Scale
-                                                                                                            <select id="gantt-export-scale" style="font-size:10px;padding:2px 4px;border-radius:4px;">
-                                                                                                                <option value="1">1x</option>
-                                                                                                                <option value="1.5">1.5x</option>
-                                                                                                                <option value="2" selected>2x</option>
-                                                                                                                <option value="3">3x</option>
-                                                                                                            </select>
-                                                                                                        </label>
-                                                                                                        <label style="font-size:10px;color:#333;display:flex;align-items:center;gap:2px;">Legend<input type="checkbox" id="gantt-export-legend" checked style="margin-left:2px;"></label>
-                                                                                                        <button type="button" id="btn-gantt-png" style="background:#4B4B4B;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;">Export PNG</button>
-                                                                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                    <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px; position:relative;"></div>
-                    <div id="critical-path-container" style="margin-top:0.5em; font-size:0.8em; background:#fff; padding:0.6em 0.8em; border-radius:10px; border:1px solid #ccc;">
-                              <strong>Critical Path:</strong> <span id="critical-path-list" style="color:#FF8200;">(calculating...)</span>
-                              <div id="critical-badge-legend" style="margin-top:4px;font-size:0.7em;color:#444;">
-                                  <em>Order badges</em> appear next to phases/items on the path.
-                              </div>
+                    <div style="display:flex;align-items:center;gap:1em;flex-wrap:wrap;">
+                        <h3 style="margin:0;">Gantt Chart</h3>
+                        <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+                            <label style="font-size:10px;color:#333;display:flex;align-items:center;gap:4px;">Scale
+                                <select id="gantt-export-scale" style="font-size:10px;padding:2px 4px;border-radius:4px;">
+                                    <option value="1">1x</option>
+                                    <option value="1.5">1.5x</option>
+                                    <option value="2" selected>2x</option>
+                                    <option value="3">3x</option>
+                                </select>
+                            </label>
+                            <button type="button" id="btn-gantt-png" style="background:#4B4B4B;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;">Export PNG</button>
+                        </div>
                     </div>
+                    <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px; position:relative;"></div>
+                    
                     <!-- Reusable Edit Modal -->
                     <div id="unified-edit-modal" style="display:none;position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:center;justify-content:center;">
                         <div style="background:#fff;color:#222;min-width:320px;max-width:520px;padding:1em 1.2em;border-radius:14px;position:relative;box-shadow:0 6px 28px rgba(0,0,0,0.3);">
@@ -738,151 +724,11 @@
                     document.addEventListener('click', (e)=>{ if(!dropdown.contains(e.target) && e.target!==depInput) dropdown.style.display='none'; });
                 })();
                 </script>
-                <div id="planning-hierarchy">
-                    <h3>Project Hierarchy</h3>
-                    <style>
-                        .tree-toggle { cursor:pointer; font-weight:600; }
-                        .tree-children { margin-left:1em; border-left:2px solid #666; padding-left:0.75em; }
-                        .meta { color:#bbb; font-size:0.85em; }
-                        .actions a, .actions button { font-size:0.75em; margin-left:0.5em; }
-                        .inline-edit { background:rgba(255,255,255,0.05); padding:6px 8px; border-radius:8px; margin:4px 0 8px 18px; }
-                        .inline-edit input[type=text], .inline-edit input[type=date], .inline-edit input[type=number], .inline-edit select { font-size:0.75em; padding:2px 4px; margin-right:4px; }
-                        .inline-edit button { font-size:0.7em; margin-right:4px; }
-                        .node-line button.small { font-size:0.65em; margin-left:6px; }
-                        .node-line { display:inline-block; }
-                    </style>
-                    {% for project in projects %}
-                    <div class="project-block" style="margin-bottom:0.75em;">
-                        <div class="node-line assoc-node" data-type="project" data-id="{{ project.id }}">
-                            <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
-                            <strong>{{ project.title }}</strong>
-                            <span class="meta">({{ project.phases|length }} phases)</span>
-                            <span class="actions">
-                                <a href="/export_project/{{ project.id }}">Export</a>
-                                <form method="post" action="/delete_project/{{ project.id }}" style="display:inline;" onsubmit="return confirm('Delete project?');">
-                                    <button type="submit" style="color:red;">Del</button>
-                                </form>
-                                <button type="button" class="small" onclick="toggleEdit('proj-edit-{{ project.id }}')">Edit</button>
-                            </span>
-                        </div>
-                        <div id="proj-edit-{{ project.id }}" class="inline-edit" style="display:none;">
-                            <form method="post" action="/edit_project/{{ project.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-                                <input type="text" name="project-title" value="{{ project.title }}" required>
-                                <button type="submit">Save</button>
-                                <button type="button" onclick="toggleEdit('proj-edit-{{ project.id }}')">Cancel</button>
-                            </form>
-                        </div>
-                        <div class="tree-children">
-                            {% for phase in project.phases %}
-                            <div style="margin:4px 0;">
-                                <div class="node-line assoc-node" data-type="phase" data-id="{{ phase.id }}">
-                                    <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
-                                    <strong>Phase:</strong> {{ phase.title }} <span class="meta">{{ phase.start_date }} / {{ phase.duration }}d</span>
-                                                                        {% if phase.notes %}<span title="{{ phase.notes|e }}" style="color:#FF8200;font-size:0.75em;margin-left:6px;">📝</span>{% endif %}
-                                    <span class="actions">
-                                        <form method="post" action="/delete_phase/{{ phase.id }}" style="display:inline;" onsubmit="return confirm('Delete phase?');"><button type="submit" style="color:red;">Del</button></form>
-                                        <button type="button" class="small" onclick="toggleEdit('phase-edit-{{ phase.id }}')">Edit</button>
-                                    </span>
-                                </div>
-                                <div id="phase-edit-{{ phase.id }}" class="inline-edit" style="display:none;">
-                                    <form method="post" action="/edit_phase/{{ phase.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-                                        <input type="text" name="phase-title" value="{{ phase.title }}" required>
-                                        <input type="date" name="phase-start" value="{{ phase.start_date }}" required>
-                                        <input type="number" name="phase-duration" value="{{ phase.duration }}" required style="width:70px;">
-                                        <label style="font-size:0.65em;">M <input type="checkbox" name="phase-milestone" {% if phase.is_milestone %}checked{% endif %}></label>
-                                        <select name="phase-type">
-                                            <option value="internal" {% if phase.internal_external=='internal' %}selected{% endif %}>Int</option>
-                                            <option value="external" {% if phase.internal_external=='external' %}selected{% endif %}>Ext</option>
-                                        </select>
-                                                                            <textarea name="phase-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ phase.notes or '' }}</textarea>
-                                        <button type="submit">Save</button>
-                                        <button type="button" onclick="toggleEdit('phase-edit-{{ phase.id }}')">Cancel</button>
-                                    </form>
-                                </div>
-                                <div class="tree-children">
-                                    {% for feature in phase.features %}
-                                    <div style="margin:2px 0;">
-                                        <div class="node-line assoc-node" data-type="feature" data-id="{{ feature.id }}">
-                                            <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
-                                            <strong>Feature:</strong> {{ feature.title }} <span class="meta">{{ feature.start_date }} / {{ feature.duration }}d</span>
-                                                                                        {% if feature.notes %}<span title="{{ feature.notes|e }}" style="color:#FF8200;font-size:0.7em;margin-left:4px;">📝</span>{% endif %}
-                                            <span class="actions">
-                                                <form method="post" action="/delete_feature/{{ feature.id }}" style="display:inline;" onsubmit="return confirm('Delete feature?');"><button type="submit" style="color:red;">Del</button></form>
-                                                <button type="button" class="small" onclick="toggleEdit('feature-edit-{{ feature.id }}')">Edit</button>
-                                            </span>
-                                        </div>
-                                        <div id="feature-edit-{{ feature.id }}" class="inline-edit" style="display:none;">
-                                            <form method="post" action="/edit_feature/{{ feature.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-                                                <input type="text" name="feature-title" value="{{ feature.title }}" required>
-                                                <input type="date" name="feature-start" value="{{ feature.start_date }}" required>
-                                                <input type="number" name="feature-duration" value="{{ feature.duration }}" required style="width:70px;">
-                                                <input type="text" name="feature-dependencies" value="{{ feature.dependencies or '' }}" placeholder="Deps" style="width:90px;">
-                                                <label style="font-size:0.65em;">M <input type="checkbox" name="feature-milestone" {% if feature.is_milestone %}checked{% endif %}></label>
-                                                <select name="feature-type">
-                                                    <option value="internal" {% if feature.internal_external=='internal' %}selected{% endif %}>Int</option>
-                                                    <option value="external" {% if feature.internal_external=='external' %}selected{% endif %}>Ext</option>
-                                                </select>
-                                                <textarea name="feature-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ feature.notes or '' }}</textarea>
-                                                <button type="submit">Save</button>
-                                                <button type="button" onclick="toggleEdit('feature-edit-{{ feature.id }}')">Cancel</button>
-                                            </form>
-                                        </div>
-                                        <div class="tree-children">
-                                            {% for item in feature.items %}
-                                            <div style="margin:2px 0;">
-                                                <div class="node-line assoc-node" data-type="item" data-id="{{ item.id }}">
-                                                    <strong>Item:</strong> {{ item.title }} <span class="meta">{{ item.start_date }} / {{ item.duration }}d</span>
-                                                    {% if item.notes %}<span title="{{ item.notes|e }}" style="color:#FF8200;font-size:0.65em;margin-left:4px;">📝</span>{% endif %}
-                                                    <span class="actions">
-                                                        <form method="post" action="/delete_item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Delete item?');"><button type="submit" style="color:red;">Del</button></form>
-                                                        <button type="button" class="small" onclick="toggleEdit('item-edit-{{ item.id }}')">Edit</button>
-                                                    </span>
-                                                </div>
-                                                <div id="item-edit-{{ item.id }}" class="inline-edit" style="display:none;">
-                                                    <form method="post" action="/edit_item/{{ item.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-                                                        <input type="text" name="item-title" value="{{ item.title }}" required>
-                                                        <input type="date" name="item-start" value="{{ item.start_date }}" required>
-                                                        <input type="number" name="item-duration" value="{{ item.duration }}" required style="width:70px;">
-                                                        <input type="text" name="item-dependencies" value="{{ item.dependencies or '' }}" placeholder="Deps" style="width:90px;">
-                                                        <label style="font-size:0.65em;">M <input type="checkbox" name="item-milestone" {% if item.is_milestone %}checked{% endif %}></label>
-                                                        <select name="item-type">
-                                                            <option value="internal" {% if item.internal_external=='internal' %}selected{% endif %}>Int</option>
-                                                            <option value="external" {% if item.internal_external=='external' %}selected{% endif %}>Ext</option>
-                                                        </select>
-                                                        <textarea name="item-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ item.notes or '' }}</textarea>
-                                                        <button type="submit">Save</button>
-                                                        <button type="button" onclick="toggleEdit('item-edit-{{ item.id }}')">Cancel</button>
-                                                    </form>
-                                                </div>
-                                            </div>
-                                            {% endfor %}
-                                        </div>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                <script>
-                    function toggleNode(el){
-                        var next=el.parentElement.nextElementSibling; // expects the children container
-                        if(!next) return;
-                        if(next.style.display==='none'){ next.style.display='block'; el.textContent='[–]'; }
-                        else { next.style.display='none'; el.textContent='[+]'; }
-                    }
-                    function toggleEdit(id){
-                        var el = document.getElementById(id);
-                        if(!el) return;
-                        el.style.display = (el.style.display==='none'|| el.style.display==='') ? 'block':'none';
-                    }
-                </script>
+                <!-- Project hierarchy removed -->
                 <!-- Hidden Gantt data for script parsing -->
                 <script id="gantt-data" type="application/json">{{ gantt_json_js|safe }}</script>
                 <script id="draft-data" type="application/json">{{ draft_json_js|safe if draft_json_js is defined else '[]' }}</script>
-                <script id="cp-data" type="application/json">{{ critical_path_ids | tojson }}</script>
+                
                 <script id="calendar-events-data" type="application/json">{{ calendar_events_json|safe }}</script>
                 <!-- Removed duplicate Gantt Chart container -->
 <script>
@@ -898,7 +744,7 @@ function renderGantt(){
     var tasks = getGanttTasks();
     if(!tasks || !tasks.length){
         document.getElementById('gantt-chart').innerHTML='<p style="text-align:center;line-height:400px;">No tasks to display</p>';
-        var cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent='None';
+        
         return;
     }
     // Preserve original full set for filtering
@@ -907,26 +753,45 @@ function renderGantt(){
         document.getElementById('gantt-chart').innerHTML='<p style="color:red;text-align:center;">Gantt library not loaded</p>';
         return;
     }
-    // Backend already annotated critical path classes. Use provided list to show sequence.
-    var cpProvided = (function(){ try { return JSON.parse(document.getElementById('cp-data').textContent)||[]; } catch(e){ return []; } })();
-    var cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent = cpProvided.length? cpProvided.join(' → ') : 'None';
+    // Critical path removed
     // Global handlers stored for reuse after cascade re-renders
     window._ganttTasks = tasks;
-    window._ganttClickHandler = function(task){
-        try {
-            if(!task || !task.id) return;
-            let type = null; let rawId = null;
-            if(task.id.startsWith('phase-')) { type='phase'; rawId=parseInt(task.id.replace('phase-','')); }
-            else if(task.id.startsWith('feature-')) { type='feature'; rawId=parseInt(task.id.replace('feature-','')); }
-            else if(task.id.startsWith('item-')) { type='item'; rawId=parseInt(task.id.replace('item-','')); }
-            if(type && !isNaN(rawId)) {
-                document.querySelectorAll('.assoc-node.selected-node').forEach(n=> n.classList.remove('selected-node'));
-                const node = document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rawId}"]`);
-                if(node) node.classList.add('selected-node');
-                loadAssociatedThumbnails(type, rawId);
-            }
-        } catch(e){ console.error('Gantt click handler error', e); }
-    };
+        window._ganttClickHandler = function(task){
+                try {
+                        if(!task || !task.id) return;
+                        let type = null; let rawId = null;
+                        if(task.id.startsWith('phase-')) { type='phase'; rawId=parseInt(task.id.replace('phase-','')); }
+                        else if(task.id.startsWith('feature-')) { type='feature'; rawId=parseInt(task.id.replace('feature-','')); }
+                        else if(task.id.startsWith('item-')) { type='item'; rawId=parseInt(task.id.replace('item-','')); }
+                        if(type && !isNaN(rawId)) {
+                                window._currentSelection = { type, id: rawId };
+                                loadAssociatedThumbnails(type, rawId);
+                                // Open inline edit modal with fetched data
+                                fetch(`/get_part?type=${type}&id=${rawId}`, { headers: { 'X-Requested-With':'XMLHttpRequest' } })
+                                    .then(r=> r.json().then(j=>({ok:r.ok,data:j})))
+                                    .then(resp=>{
+                                        if(!resp.ok || resp.data.status!=='ok'){ return; }
+                                        const p = resp.data.part;
+                                        const modal = document.getElementById('unified-edit-modal');
+                                        const form = document.getElementById('unified-edit-form');
+                                        if(!modal || !form) return;
+                                        form.reset();
+                                        form.elements['edit-kind'].value = type;
+                                        form.elements['edit-id'].value = String(rawId);
+                                        form.elements['edit-title'].value = p.title || '';
+                                        if(p.start) form.elements['edit-start'].value = p.start;
+                                        if(typeof p.duration !== 'undefined' && p.duration !== null) form.elements['edit-duration'].value = p.duration;
+                                        form.elements['edit-dependencies'].value = p.dependencies || '';
+                                        form.elements['edit-notes'].value = p.notes || '';
+                                        form.elements['edit-internal-external'].value = p.internal_external || 'internal';
+                                        form.elements['edit-milestone'].checked = !!p.is_milestone;
+                                        const titleEl = document.getElementById('unified-edit-title');
+                                        if(titleEl) titleEl.textContent = `Edit ${type.charAt(0).toUpperCase()+type.slice(1)}`;
+                                        modal.style.display='flex';
+                                    }).catch(()=>{});
+                        }
+                } catch(e){ console.error('Gantt click handler error', e); }
+        };
     window._ganttDateChangeHandler = function(task,start,end){
         const s = start.toISOString().slice(0,10);
         const e = end.toISOString().slice(0,10);
@@ -939,7 +804,7 @@ function renderGantt(){
                 if(task.id.startsWith('phase-')) nodeSel = `.assoc-node[data-type="phase"][data-id="${task.id.replace('phase-','')}"]`;
                 else if(task.id.startsWith('feature-')) nodeSel = `.assoc-node[data-type="feature"][data-id="${task.id.replace('feature-','')}"]`;
                 else if(task.id.startsWith('item-')) nodeSel = `.assoc-node[data-type="item"][data-id="${task.id.replace('item-','')}"]`;
-                if(nodeSel){ const node=document.querySelector(nodeSel); if(node){ const meta=node.querySelector('.meta'); if(meta){ meta.textContent = `${s} / ${resp.data.duration}d`; } } }
+                
                 if(window._calendarInstance){
                     const evt = window._calendarInstance.getEventById(task.id);
                     if(evt){ evt.setStart(s); const endObj=new Date(e); endObj.setDate(endObj.getDate()+1); evt.setEnd(endObj.toISOString().slice(0,10)); }
@@ -948,11 +813,7 @@ function renderGantt(){
                     const tObj = window._ganttTasks.find(t=> t.id===task.id); if(tObj){ tObj.start=s; tObj.end=e; }
                 }
                 try { refreshTimeline(); } catch(err){}
-                if(resp.data.critical_path){
-                    document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
-                    resp.data.critical_path.forEach(id=>{ const bar=document.querySelector(`.gantt .bar[data-id="${id}"]`); if(bar) bar.classList.add('critical-path'); });
-                    const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=resp.data.critical_path.join(' → ');
-                }
+                
                 applyHierarchyVisuals();
                 if(resp.data.cascade && resp.data.cascade.length){
                     inPlaceCascadeApply(resp.data.cascade, resp.data.critical_path || []);
@@ -970,7 +831,7 @@ document.addEventListener('DOMContentLoaded', function() { renderGantt(); });
 </script>
 <script>
 // Apply cascade adjustments in-place: update internal task list, recreate gantt instance
-function inPlaceCascadeApply(adjustments, newCriticalPath){
+function inPlaceCascadeApply(adjustments){
     if(!Array.isArray(adjustments) || !adjustments.length) return;
     // Update internal task data
     adjustments.forEach(adj=>{
@@ -1021,69 +882,10 @@ function inPlaceCascadeApply(adjustments, newCriticalPath){
     });
     // Reapply visuals
     applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0);
-    if(newCriticalPath && newCriticalPath.length){
-        document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
-        newCriticalPath.forEach(id=>{
-            const bar=document.querySelector(`.gantt .bar[data-id="${id}"]`); if(bar) bar.classList.add('critical-path');
-        });
-        const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=newCriticalPath.join(' → ');
-    }
+    
 }
 // Hierarchy insertion helpers
-function insertHierarchySnippet(partType, snippet, parents){
-    if(!snippet) return;
-    if(partType==='phase'){
-        const projectId = parents && parents.project_id;
-        if(projectId){
-            const projectNode = document.querySelector(`.project-block .assoc-node[data-type="project"][data-id="${projectId}"]`);
-            if(projectNode){
-                const treeChildren = projectNode.parentElement.querySelector(':scope > .tree-children');
-                if(treeChildren){ treeChildren.insertAdjacentHTML('beforeend', snippet); }
-            }
-        }
-    } else if(partType==='feature'){
-        const phaseId = parents && parents.phase_id;
-        if(phaseId){
-            const phaseNode = document.querySelector(`.assoc-node[data-type="phase"][data-id="${phaseId}"]`);
-            if(phaseNode){
-                let sib = phaseNode.parentElement.nextElementSibling;
-                if(sib && sib.classList.contains('tree-children')){ sib.insertAdjacentHTML('beforeend', snippet); }
-            }
-        }
-    } else if(partType==='item'){
-        const featureId = parents && parents.feature_id;
-        if(featureId){
-            const featureNode = document.querySelector(`.assoc-node[data-type="feature"][data-id="${featureId}"]`);
-            if(featureNode){
-                let sib = featureNode.parentElement.nextElementSibling;
-                if(sib && sib.classList.contains('tree-children')){ sib.insertAdjacentHTML('beforeend', snippet); }
-            }
-        }
-    }
-}
-
-// Insert promoted draft snippet (reuse existing logic with slight fallback)
-function insertPromotedSnippet(partType, snippet, parents){
-    if(!snippet) return;
-    try { insertHierarchySnippet(partType, snippet, parents); return; } catch(e){}
-    // Fallback: simple append to matching container
-    if(partType==='phase'){
-        const projId = parents && parents.project_id; if(projId){
-            const projNode=document.querySelector(`.project-block .assoc-node[data-type="project"][data-id="${projId}"]`);
-            if(projNode){ const tc=projNode.parentElement.querySelector(':scope > .tree-children'); if(tc) tc.insertAdjacentHTML('beforeend', snippet); }
-        }
-    } else if(partType==='feature'){
-        const phaseId = parents && parents.phase_id; if(phaseId){
-            const phaseNode=document.querySelector(`.assoc-node[data-type="phase"][data-id="${phaseId}"]`);
-            if(phaseNode){ const tc=phaseNode.parentElement.nextElementSibling; if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', snippet); }
-        }
-    } else if(partType==='item'){
-        const featureId = parents && parents.feature_id; if(featureId){
-            const featureNode=document.querySelector(`.assoc-node[data-type="feature"][data-id="${featureId}"]`);
-            if(featureNode){ const tc=featureNode.parentElement.nextElementSibling; if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', snippet); }
-        }
-    }
-}
+// Hierarchy insertion helpers removed
 
 // Edit modal reuse logic
 function openEditModal(kind, id){
@@ -1112,7 +914,7 @@ function openEditModal(kind, id){
     }
     modal.style.display='flex';
 }
-function closeEditModal(){ const modal=document.getElementById('unified-edit-modal'); if(modal) modal.style.display='none'; }
+function closeUnifiedEditModal(){ const modal=document.getElementById('unified-edit-modal'); if(modal) modal.style.display='none'; }
 document.addEventListener('click', function(e){
     if(e.target && e.target.matches('.actions button.small[data-edit-kind]')){
         const kind=e.target.getAttribute('data-edit-kind');
@@ -1120,20 +922,63 @@ document.addEventListener('click', function(e){
         openEditModal(kind,id);
     }
 });
-document.getElementById('unified-edit-close').onclick = closeEditModal;
-document.getElementById('unified-edit-cancel').onclick = closeEditModal;
+document.getElementById('unified-edit-close').onclick = closeUnifiedEditModal;
+document.getElementById('unified-edit-cancel').onclick = closeUnifiedEditModal;
 document.getElementById('unified-edit-form').addEventListener('submit', function(ev){
     ev.preventDefault();
     const kind = this.elements['edit-kind'].value;
     const id = this.elements['edit-id'].value;
-    const payload = new FormData(this);
-    // Map to existing endpoints
+    // Build JSON for AJAX
+    const body = {
+        title: this.elements['edit-title'].value,
+        start: this.elements['edit-start'].value,
+        duration: parseInt(this.elements['edit-duration'].value || '0') || 0,
+        is_milestone: this.elements['edit-milestone'].checked,
+        internal_external: this.elements['edit-internal-external'].value,
+        dependencies: this.elements['edit-dependencies'].value,
+        notes: this.elements['edit-notes'].value
+    };
     let url=null;
     if(kind==='phase') url='/edit_phase/'+id; else if(kind==='feature') url='/edit_feature/'+id; else if(kind==='item') url='/edit_item/'+id;
     if(!url) return;
-    fetch(url, {method:'POST', body:payload})
-    .then(()=>{ window.location.reload(); })
-    .catch(()=>{ alert('Edit failed'); });
+    fetch(url, {method:'POST', headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'}, body: JSON.stringify(body)})
+      .then(r=> r.json().then(j=>({ok:r.ok,data:j})))
+      .then(resp=>{
+        if(!resp.ok || resp.data.status!=='ok'){ alert(resp.data && resp.data.error ? resp.data.error : 'Edit failed'); return; }
+        // Update gantt task in-place
+        try {
+            const t = resp.data.task; if(t){
+                const idx = (window._ganttTasks||[]).findIndex(x=> x.id===t.id);
+                if(idx>-1){ window._ganttTasks[idx] = t; }
+                const gc=document.getElementById('gantt-chart'); if(gc) gc.innerHTML='';
+                window._ganttInstance = new Gantt('#gantt-chart', window._ganttTasks, { view_mode:'Day', bar_height:24, custom_popup_html:null, on_click:window._ganttClickHandler, on_date_change:window._ganttDateChangeHandler });
+                applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0);
+            }
+            // Update hierarchy meta text
+            const sid = `${kind}-${id}`;
+            let nodeSel=null;
+            if(kind==='phase') nodeSel = `.assoc-node[data-type="phase"][data-id="${id}"]`;
+            else if(kind==='feature') nodeSel = `.assoc-node[data-type="feature"][data-id="${id}"]`;
+            else if(kind==='item') nodeSel = `.assoc-node[data-type="item"][data-id="${id}"]`;
+            if(nodeSel){ const node=document.querySelector(nodeSel); if(node){ const meta=node.querySelector('.meta'); if(meta){ meta.textContent = `${body.start} / ${body.duration}d`; } } }
+            // Update calendar
+            if(window._calendarInstance){
+                const evt = window._calendarInstance.getEventById(sid);
+                if(evt){
+                    evt.setStart(body.start);
+                    const eDate = new Date(body.start + 'T00:00:00Z'); eDate.setDate(eDate.getDate() + (body.duration||0)); eDate.setDate(eDate.getDate()+1);
+                    evt.setEnd(eDate.toISOString().slice(0,10));
+                }
+            }
+            if(resp.data.critical_path){
+                document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
+                resp.data.critical_path.forEach(id=>{ const bar=document.querySelector(`.gantt .bar[data-id="${id}"]`); if(bar) bar.classList.add('critical-path'); });
+                const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=resp.data.critical_path.join(' → ');
+            }
+        } catch(e) { console.warn('Post-edit UI update issue', e); }
+    closeUnifiedEditModal();
+      })
+      .catch(()=>{ alert('Edit failed'); });
 });
 
 // Dependency picker with labels
@@ -1517,10 +1362,12 @@ function addLaneBands(){
                });
         });
         function unlinkImage(img){
-            // Determine current context from selected node
-            const selected=document.querySelector('.assoc-node.selected-node');
-            let context_type=null, context_id=null;
-            if(selected){ context_type=selected.dataset.type; context_id=selected.dataset.id; }
+            // Determine current context from current Gantt selection
+            const sel = (window._currentSelection && window._currentSelection.type && window._currentSelection.id)
+                ? { type: window._currentSelection.type, id: window._currentSelection.id }
+                : null;
+            const context_type = sel ? sel.type : null;
+            const context_id = sel ? sel.id : null;
             fetch('/media/unlink',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_id:img.id,context_type,context_id})})
               .then(r=>r.json())
               .then(resp=>{
@@ -1528,7 +1375,7 @@ function addLaneBands(){
                    // Update local list: clear association values
                    const target=ALL_IMAGES.find(a=>a.id===img.id);
                    if(target){ if(context_type==='phase') target.phase_id=null; else if(context_type==='feature') target.feature_id=null; else if(context_type==='item') target.item_id=null; else { target.phase_id=target.feature_id=target.item_id=null; } }
-                   if(selected && context_type){
+                   if(sel && context_type){
                       // reload thumbnails for current context
                       loadAssociatedThumbnails(context_type, parseInt(context_id));
                    }
@@ -1771,52 +1618,7 @@ function addLaneBands(){
                 }
             });
         }
-                // --- Drag & Drop Hierarchy Ordering (basic) ---
-                (function(){
-                    const container=document.getElementById('planning-hierarchy'); if(!container) return;
-                    let dragEl=null; let placeholder=document.createElement('div');
-                    placeholder.style.height='6px'; placeholder.style.margin='2px 0'; placeholder.style.background='#FF8200'; placeholder.style.borderRadius='3px';
-                    container.addEventListener('dragstart', e=>{
-                        const node=e.target.closest('.node-line.assoc-node'); if(!node) return; dragEl=node; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', node.dataset.type+':'+node.dataset.id);
-                        node.style.opacity='0.4';
-                    });
-                    container.addEventListener('dragend', e=>{ if(dragEl){ dragEl.style.opacity=''; dragEl=null; } placeholder.remove(); });
-                    container.querySelectorAll('.node-line.assoc-node').forEach(n=> n.setAttribute('draggable','true'));
-                    container.addEventListener('dragover', e=>{
-                        if(!dragEl) return; const over=e.target.closest('.node-line.assoc-node'); if(!over || over===dragEl) return; e.preventDefault();
-                        const rect=over.getBoundingClientRect(); const after=(e.clientY-rect.top) > rect.height/2; const parent=over.parentElement.parentElement; // wrapper -> tree-children
-                        if(after) over.parentElement.after(placeholder); else over.parentElement.before(placeholder);
-                    });
-                    container.addEventListener('drop', e=>{
-                        if(!dragEl || !placeholder.parentElement) return; e.preventDefault();
-                        const wrapper=dragEl.parentElement; placeholder.replaceWith(wrapper);
-                        // Determine new order & call backend
-                        const type=dragEl.dataset.type; const id=dragEl.dataset.id; let siblings=[]; let parentId=null; let endpoint=null;
-                        if(type==='phase'){
-                            endpoint='/reorder_phase';
-                            const projectBlock=dragEl.closest('.project-block'); parentId=projectBlock && projectBlock.querySelector('.assoc-node[data-type="project"]').dataset.id;
-                            siblings=[...projectBlock.querySelectorAll('.node-line.assoc-node[data-type="phase"]')];
-                        } else if(type==='feature'){
-                            endpoint='/reorder_feature'; const phaseWrapper=findAncestorOfType(dragEl,'phase'); parentId=phaseWrapper? phaseWrapper.dataset.id:null; siblings=[...phaseWrapper.parentElement.nextElementSibling.querySelectorAll('.node-line.assoc-node[data-type="feature"]')];
-                        } else if(type==='item'){
-                            endpoint='/reorder_item'; const featureWrapper=findAncestorOfType(dragEl,'feature'); parentId=featureWrapper? featureWrapper.dataset.id:null; siblings=[...featureWrapper.parentElement.nextElementSibling.querySelectorAll('.node-line.assoc-node[data-type="item"]')];
-                        }
-                        const newPos=siblings.findIndex(n=> n===dragEl);
-                        if(endpoint && newPos>-1){
-                            let payload={};
-                            if(type==='phase') payload={phase_id:id, project_id:parentId, new_position:newPos};
-                            if(type==='feature') payload={feature_id:id, phase_id:parentId, new_position:newPos};
-                            if(type==='item') payload={item_id:id, feature_id:parentId, new_position:newPos};
-                            fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-                                .then(r=>r.json()).then(resp=>{ if(resp.status!=='ok') console.warn('Reorder failed', resp); });
-                        }
-                    });
-                    function findAncestorOfType(node,type){
-                        let cur=node;
-                        while(cur){ if(cur.classList && cur.classList.contains('assoc-node') && cur.dataset.type===type) return cur; cur=cur.parentElement; }
-                        return null;
-                    }
-                })();
+                // Hierarchy ordering removed
                         // Active users polling
                         (function(){
                              const chipsEl = document.getElementById('active-user-chips');
@@ -1834,125 +1636,7 @@ function addLaneBands(){
                              }
                              setInterval(refreshActive, 20000);
                         })();
-                        // --- Critical Path filtering & enhancements ---
-                  (function(){
-                      const btnOnly=document.getElementById('btn-critical-only');
-                      const btnAll=document.getElementById('btn-critical-all');
-                      if(!btnOnly||!btnAll) return;
-                      function criticalIds(){
-                         try { return (JSON.parse(document.getElementById('cp-data').textContent)||[]);} catch(e){ return []; }
-                      }
-                             function applyBadges(){
-                                 const cp = criticalIds(); const orderMap={}; cp.forEach((id,i)=> orderMap[id]=i+1);
-                                 document.querySelectorAll('.assoc-node .crit-badge').forEach(b=> b.remove());
-                                 cp.forEach(id=>{
-                                     let type=null; if(id.startsWith('phase-')) type='phase'; else if(id.startsWith('feature-')) type='feature'; else if(id.startsWith('item-')) type='item';
-                                     if(!type) return; const rid=id.split('-')[1];
-                                     const node=document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rid}"]`);
-                                     if(node){
-                                         const badge=document.createElement('span');
-                                         badge.className='crit-badge';
-                                         badge.textContent=orderMap[id];
-                                         badge.style.cssText='margin-left:6px;background:#FF8200;color:#fff;font-size:10px;font-weight:700;min-width:18px;text-align:center;padding:2px 5px;border-radius:10px;box-shadow:0 0 4px rgba(255,130,0,0.4);transition:transform .25s, background .25s;';
-                                         node.appendChild(badge);
-                                     }
-                                 });
-                             }
-                      function rebuild(tasks){
-                         const gc=document.getElementById('gantt-chart'); if(gc) gc.innerHTML='';
-                         window._ganttTasks = tasks.slice();
-                         window._ganttInstance = new Gantt('#gantt-chart', window._ganttTasks, { view_mode:'Day', bar_height:24, custom_popup_html:null, on_click:window._ganttClickHandler, on_date_change:window._ganttDateChangeHandler });
-                         applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0);
-                         // Dim hierarchy & calendar for non-critical when filtering
-                         if(window._criticalFilterActive){
-                             const cpSet = new Set(criticalIds());
-                                        document.querySelectorAll('.assoc-node').forEach(n=>{
-                                 const type=n.dataset.type; const id=n.dataset.id; if(['phase','feature','item'].includes(type)){
-                                                    const taskId=type+'-'+id; if(!cpSet.has(taskId)) n.style.opacity='0.15'; else n.style.opacity='1';
-                                 }
-                             });
-                             if(window._calendarInstance){
-                                             window._calendarInstance.getEvents().forEach(ev=>{ if(!cpSet.has(ev.id)) ev.setProp('display','auto'); });
-                             }
-                                        ghostNonCriticalBars();
-                         } else {
-                             document.querySelectorAll('.assoc-node').forEach(n=> n.style.opacity='');
-                                        if(window._calendarInstance){ window._calendarInstance.getEvents().forEach(ev=> ev.setProp('display','auto')); }
-                                        unghostBars();
-                         }
-                                 applyBadges();
-                      }
-                             function ghostNonCriticalBars(){
-                                 const cpSet=new Set(criticalIds());
-                                 const svg=document.querySelector('#gantt-chart svg'); if(!svg) return;
-                                 svg.querySelectorAll('.bar-wrapper').forEach(w=>{
-                                     const rect=w.querySelector('.bar'); if(!rect) return; const id=rect.getAttribute('data-id');
-                                     if(!cpSet.has(id)){
-                                         rect.style.fillOpacity='0.12'; rect.style.strokeOpacity='0.15';
-                                     } else { rect.style.fillOpacity='1'; rect.style.strokeOpacity='1'; }
-                                 });
-                             }
-                             function unghostBars(){
-                                 const svg=document.querySelector('#gantt-chart svg'); if(!svg) return;
-                                 svg.querySelectorAll('.bar-wrapper .bar').forEach(r=>{ r.style.fillOpacity='1'; r.style.strokeOpacity='1'; });
-                             }
-                                 btnOnly.addEventListener('click', function(){
-                         if(window._criticalFilterActive) return; window._criticalFilterActive=true;
-                         const ids=new Set(criticalIds());
-                         const filtered=(window._allGanttTasks||[]).filter(t=> ids.has(t.id));
-                         rebuild(filtered);
-                         btnOnly.style.display='none'; btnAll.style.display='inline-block';
-                                 persistFilterState('on');
-                                     // color critical bars red
-                                     recolorCriticalBars(true);
-                      });
-                      btnAll.addEventListener('click', function(){
-                         window._criticalFilterActive=false; rebuild(window._allGanttTasks||[]);
-                         btnAll.style.display='none'; btnOnly.style.display='inline-block';
-                                 persistFilterState('off');
-                                     recolorCriticalBars(false);
-                      });
-                      // If critical path updates externally, reapply filter
-                      window._refreshCriticalFilter = function(){ if(window._criticalFilterActive){ const ids=new Set(criticalIds()); const filtered=(window._allGanttTasks||[]).filter(t=> ids.has(t.id)); rebuild(filtered);} };
-                             function persistFilterState(state){ fetch('/set_critical_filter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state})}).catch(()=>{}); }
-                             // Apply saved state on load
-                                         const saved = "{{ 'on' if critical_filter_active else 'off' }}";
-                                         if(saved==='on'){ setTimeout(()=>{ btnOnly.click(); }, 50); }
-                                         function recolorCriticalBars(active){
-                                             const svg=document.querySelector('#gantt-chart svg'); if(!svg) return;
-                                             svg.querySelectorAll('.bar-wrapper .bar').forEach(r=>{
-                                                 if(r.classList.contains('critical-path')){
-                                                     // Always orange base
-                                                     r.style.stroke='#FF8200'; r.style.fill='#FF8200';
-                                                     // Apply hashed overlay only when filter active for visual emphasis
-                                                     if(active){
-                                                         // Use pattern fill via inline pattern creation
-                                                         let defs=svg.querySelector('defs');
-                                                         if(!defs){ defs=document.createElementNS('http://www.w3.org/2000/svg','defs'); svg.insertBefore(defs, svg.firstChild); }
-                                                         let pat=svg.querySelector('#crit-hash');
-                                                         if(!pat){
-                                                             pat=document.createElementNS('http://www.w3.org/2000/svg','pattern');
-                                                             pat.setAttribute('id','crit-hash'); pat.setAttribute('patternUnits','userSpaceOnUse'); pat.setAttribute('width','6'); pat.setAttribute('height','6');
-                                                             const path=document.createElementNS('http://www.w3.org/2000/svg','path');
-                                                             path.setAttribute('d','M0 6 L6 0 M-1 1 L1 -1 M5 7 L7 5');
-                                                             path.setAttribute('stroke','#4B4B4B'); path.setAttribute('stroke-width','1');
-                                                             pat.appendChild(path); defs.appendChild(pat);
-                                                         }
-                                                         r.style.fill='url(#crit-hash)';
-                                                     } else {
-                                                         // Remove pattern (keep plain orange)
-                                                         if(r.style.fill && r.style.fill.startsWith('url(')) r.style.fill='#FF8200';
-                                                     }
-                                                 }
-                                             });
-                                         }
-                             // Transition styling
-                             const style=document.createElement('style'); style.textContent=`
-                                 .assoc-node { transition: opacity .35s ease; }
-                                 .gantt .bar { transition: fill-opacity .35s ease, stroke-opacity .35s ease; }
-                                 .crit-badge:hover { transform: scale(1.15); background:#a80000 !important; }
-                             `; document.head.appendChild(style);
-                  })();
+                        // Critical path filtering removed
         // Gantt PNG Export
         (function(){
             const btn=document.getElementById('btn-gantt-png'); if(!btn) return;
@@ -1971,40 +1655,29 @@ function addLaneBands(){
                 const svg=document.querySelector('#gantt-chart svg');
                 if(!svg){ alert('No Gantt chart to export.'); return; }
                 const scaleSel=document.getElementById('gantt-export-scale');
-                const legendChk=document.getElementById('gantt-export-legend');
                 const scale = parseFloat(scaleSel ? scaleSel.value : '2') || 2;
                 const clone=svg.cloneNode(true);
                 inlineStyles(clone);
-                // Wrap with optional header+legend group
+                // Wrap with header group (title + logos)
                 let exportGroup=document.createElementNS('http://www.w3.org/2000/svg','g');
                 // Determine original bbox before modifications
                 const bbox=svg.getBBox();
-                let headerHeight=0;
-                if(legendChk && legendChk.checked){
-                    headerHeight=50; // reserve
-                    const title=document.createElementNS('http://www.w3.org/2000/svg','text');
-                    title.setAttribute('x', bbox.x+10); title.setAttribute('y', bbox.y + 20);
-                    title.setAttribute('font-size','16'); title.setAttribute('font-family','Segoe UI, Arial, sans-serif'); title.setAttribute('font-weight','600');
-                    title.setAttribute('fill','#333');
-                    title.textContent='Gantt Chart Export';
-                    exportGroup.appendChild(title);
-                    const legend=document.getElementById('critical-legend');
-                    if(legend){
-                        // Render simple legend swatches
-                        const legendGroup=document.createElementNS('http://www.w3.org/2000/svg','g');
-                        const items=[['Internal','#FF8200'],['External','#4B4B4B'],['Critical','#FF8200']];
-                        items.forEach((it,i)=>{
-                            const gx=bbox.x+10 + i*120;
-                            const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
-                            rect.setAttribute('x', gx); rect.setAttribute('y', bbox.y+30); rect.setAttribute('width',14); rect.setAttribute('height',14); rect.setAttribute('rx',3); rect.setAttribute('ry',3); rect.setAttribute('fill', it[1]); rect.setAttribute('stroke', it[1]);
-                            legendGroup.appendChild(rect);
-                            const label=document.createElementNS('http://www.w3.org/2000/svg','text');
-                            label.setAttribute('x', gx+20); label.setAttribute('y', bbox.y+42); label.setAttribute('font-size','12'); label.setAttribute('font-family','Segoe UI, Arial, sans-serif'); label.setAttribute('fill','#333'); label.textContent=it[0];
-                            legendGroup.appendChild(label);
-                        });
-                        exportGroup.appendChild(legendGroup);
-                    }
-                }
+                let headerHeight=60;
+                const title=document.createElementNS('http://www.w3.org/2000/svg','text');
+                title.setAttribute('x', bbox.x+10); title.setAttribute('y', bbox.y + 24);
+                title.setAttribute('font-size','16'); title.setAttribute('font-family','Segoe UI, Arial, sans-serif'); title.setAttribute('font-weight','600');
+                title.setAttribute('fill','#333');
+                title.textContent='Gantt Chart';
+                exportGroup.appendChild(title);
+                // Logos
+                const logo1=document.createElementNS('http://www.w3.org/2000/svg','image');
+                logo1.setAttributeNS('http://www.w3.org/1999/xlink','href',"{{ url_for('static', filename='Power_T.svg') }}");
+                logo1.setAttribute('x', bbox.x + 200); logo1.setAttribute('y', bbox.y + 6); logo1.setAttribute('width', 40); logo1.setAttribute('height', 40);
+                exportGroup.appendChild(logo1);
+                const logo2=document.createElementNS('http://www.w3.org/2000/svg','image');
+                logo2.setAttributeNS('http://www.w3.org/1999/xlink','href',"{{ url_for('static', filename='LSI_Graphics.svg') }}");
+                logo2.setAttribute('x', bbox.x + 246); logo2.setAttribute('y', bbox.y + 10); logo2.setAttribute('width', 100); logo2.setAttribute('height', 30);
+                exportGroup.appendChild(logo2);
                 // Shift cloned bars down if header
                 if(headerHeight){
                     clone.querySelectorAll('*[y]').forEach(el=>{ const y=el.getAttribute('y'); if(y!==null && !isNaN(parseFloat(y))) el.setAttribute('y', parseFloat(y)+headerHeight); });
@@ -2015,9 +1688,10 @@ function addLaneBands(){
                 // Build root svg for export
                 const pad=20;
                 const width=bbox.width+pad*2;
-                const height=bbox.height+pad*2 + headerHeight;
+                const height=bbox.height+pad*2 + headerHeight + 28;
                 const root=document.createElementNS('http://www.w3.org/2000/svg','svg');
                 root.setAttribute('xmlns','http://www.w3.org/2000/svg');
+                root.setAttribute('xmlns:xlink','http://www.w3.org/1999/xlink');
                 root.setAttribute('width', width);
                 root.setAttribute('height', height);
                 root.setAttribute('viewBox', `${bbox.x-pad} ${bbox.y-pad} ${width} ${height}`);
@@ -2028,6 +1702,12 @@ function addLaneBands(){
                 if(exportGroup.childNodes.length){ root.appendChild(exportGroup); }
                 // Append cloned gantt group(s)
                 while(clone.childNodes.length){ root.appendChild(clone.firstChild); }
+                // Watermark footer
+                const watermark=document.createElementNS('http://www.w3.org/2000/svg','text');
+                watermark.setAttribute('x', bbox.x + 10); watermark.setAttribute('y', bbox.y + height - 12);
+                watermark.setAttribute('font-size','11'); watermark.setAttribute('font-family','Segoe UI, Arial, sans-serif'); watermark.setAttribute('fill','#666');
+                watermark.textContent='Copyright 2025 © LSI Graphics, LLC. All Rights Reserved';
+                root.appendChild(watermark);
                 const serializer=new XMLSerializer();
                 let source=serializer.serializeToString(root);
                 if(!source.match(/^<svg[^>]+xmlns=/)) source = source.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"');
