@@ -62,9 +62,15 @@ def create_app():
                         except Exception as e:
                             # Silent for now; could log e
                             pass
+            # Existing ad-hoc additions
             ensure_column('phase', 'notes TEXT')
             ensure_column('item', 'notes TEXT')
             ensure_column('sub_item', 'notes TEXT')
+            # Newer schema evolution safeguards (avoid crashes if migrations not run)
+            ensure_column('user', 'last_seen DATETIME')
+            ensure_column('phase', 'sort_order INTEGER DEFAULT 0')
+            ensure_column('item', 'sort_order INTEGER DEFAULT 0')
+            ensure_column('sub_item', 'sort_order INTEGER DEFAULT 0')
         except Exception:
             # Ignore migration issues silently to avoid startup failure
             pass

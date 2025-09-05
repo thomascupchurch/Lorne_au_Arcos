@@ -187,8 +187,11 @@
         <div style="width:1px;height:90px;background:#888;margin:0 4px;align-self:center;box-shadow:0 0 0 1px rgba(255,255,255,0.05);"></div>
         <img src="{{ url_for('static', filename='LSI_Graphics.svg') }}" alt="LSI Graphics" style="height:110px;width:auto;object-fit:contain;display:block;margin-left:-2px;">
         {% if current_user.is_authenticated %}
-        <div style="position:absolute;right:14px;bottom:10px;font:12px/1.2 'Segoe UI',sans-serif;color:#ddd;background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:8px;backdrop-filter:blur(2px);display:flex;align-items:center;gap:8px;">
-            <span style="opacity:0.9;">{{ current_user.username }}</span>
+                <div style="position:absolute;right:14px;bottom:10px;font:12px/1.2 'Segoe UI',sans-serif;color:#ddd;background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:8px;backdrop-filter:blur(2px);display:flex;align-items:center;gap:10px;">
+                        <div style="display:flex;flex-direction:column;gap:2px;">
+                            <span style="opacity:0.9;font-weight:600;">You: {{ current_user.username }}</span>
+                              <span style="font-size:11px;opacity:.85;">Active: <span id="active-user-chips">{% for u in active_usernames %}{% if u!=current_user.username %}<span class='active-chip' style='background:#555;color:#fff;padding:2px 6px;border-radius:12px;margin-right:4px;'>{{ u }}</span>{% endif %}{% endfor %}</span></span>
+                        </div>
             {% if current_user.is_admin %}
             <a href="{{ url_for('main.admin_users') }}" style="color:#FF8200;background:#fff;padding:4px 8px;border-radius:6px;text-decoration:none;font-weight:600;">Admin</a>
             {% endif %}
@@ -250,7 +253,37 @@
                     <button type="submit">Create New Project</button>
                 </form>
             </div>
-            <h2>Planning Section</h2>
+                        <h2>Planning Section</h2>
+                        <h3 style="margin-top:1.5em;">Project Part Creation</h3>
+                        <section id="holding-area" style="margin:10px 0 24px 0; border:1px solid #661a1a; padding:10px 12px; border-radius:10px; background:rgba(102,26,26,0.08);">
+                            <h4 style="margin:0 0 8px 0;color:#ff7777;font-size:0.95em;display:flex;align-items:center;gap:8px;">Holding Area (Draft Parts) <span style="font-weight:400;font-size:0.8em;opacity:.8;">Title-only drafts appear here as red chips until promoted.</span></h4>
+                            <form id="draft-create-form" style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;">
+                                <div style="flex:3 1 220px;min-width:180px;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Title *</label>
+                                    <input type="text" name="draft-title" placeholder="Draft Title" required style="width:100%;">
+                                </div>
+                                <div style="flex:1 1 130px;min-width:110px;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Type *</label>
+                                    <select name="draft-type" required style="width:100%;">
+                                        <option value="">—</option>
+                                        <option value="phase">Phase</option>
+                                        <option value="item">Item</option>
+                                        <option value="subitem">SubItem</option>
+                                    </select>
+                                </div>
+                                <div style="flex:1 1 130px;min-width:110px;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Int/Ext</label>
+                                    <select name="draft-internal-external" style="width:100%;">
+                                        <option value="internal">Internal</option>
+                                        <option value="external">External</option>
+                                    </select>
+                                </div>
+                                <div style="flex:0 0 auto;">
+                                    <button type="submit" style="background:#aa0000;color:#fff;border:none;padding:0.55em 1em;border-radius:8px;font-weight:600;cursor:pointer;">Add Draft</button>
+                                </div>
+                            </form>
+                            <div id="draft-bars" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;"></div>
+                        </section>
             <div id="planning-view-controls" style="display:flex;gap:1em;align-items:center;margin-bottom:1em;">
                 <button onclick="showView('gantt')" id="btn-gantt">Gantt Chart</button>
                 <button onclick="showView('calendar')" id="btn-calendar">Calendar</button>
@@ -261,10 +294,60 @@
             </div>
             <div id="planning-view" style="margin-bottom:2em;">
                 <div id="gantt-view" style="display:block;">
-                    <h3>Gantt Chart</h3>
+                                        <div style="display:flex;align-items:center;gap:1em;flex-wrap:wrap;">
+                                            <h3 style="margin:0;">Gantt Chart</h3>
+                                              <div id="critical-legend" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #ccc;padding:6px 10px;border-radius:10px;font-size:11px;">
+                                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FF8200;border-radius:3px;display:inline-block;border:1px solid #d96c00;"></span>Internal</span>
+                                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#4B4B4B;border-radius:3px;display:inline-block;border:1px solid #2f2f2f;"></span>External</span>
+                                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:linear-gradient(135deg,#FF8200 40%,#d90000 40%);border-radius:3px;display:inline-block;border:1px solid #d90000;box-shadow:0 0 4px rgba(217,0,0,0.5);"></span>Critical</span>
+                                                <div style="margin-left:8px;display:flex;gap:6px;">
+                                                    <button type="button" id="btn-critical-only" style="background:#d90000;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;">Show Critical Only</button>
+                                                    <button type="button" id="btn-critical-all" style="background:#666;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;display:none;">Show All</button>
+                                                  <a id="btn-critical-export" href="/export_critical_csv" style="background:#FF8200;color:#fff;padding:4px 10px;border-radius:6px;font-weight:600;font-size:11px;text-decoration:none;">Export CSV</a>
+                                                </div>
+                                            </div>
+                                        </div>
                     <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px; position:relative;"></div>
                     <div id="critical-path-container" style="margin-top:0.5em; font-size:0.8em; background:#fff; padding:0.6em 0.8em; border-radius:10px; border:1px solid #ccc;">
-                        <strong>Critical Path:</strong> <span id="critical-path-list" style="color:#d90000;">(calculating...)</span>
+                              <strong>Critical Path:</strong> <span id="critical-path-list" style="color:#d90000;">(calculating...)</span>
+                              <div id="critical-badge-legend" style="margin-top:4px;font-size:0.7em;color:#444;">
+                                  <em>Order badges</em> appear next to phases/items on the path.
+                              </div>
+                    </div>
+                    <!-- Reusable Edit Modal -->
+                    <div id="unified-edit-modal" style="display:none;position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:3000;align-items:center;justify-content:center;">
+                        <div style="background:#fff;color:#222;min-width:320px;max-width:520px;padding:1em 1.2em;border-radius:14px;position:relative;box-shadow:0 6px 28px rgba(0,0,0,0.3);">
+                            <button type="button" id="unified-edit-close" style="position:absolute;right:8px;top:6px;background:transparent;border:none;font-size:1.4em;cursor:pointer;">×</button>
+                            <h3 id="unified-edit-title" style="margin:0 0 .75em 0;font-size:1.1em;">Edit</h3>
+                            <form id="unified-edit-form" method="post" style="display:flex;flex-direction:column;gap:.55em;">
+                                <input type="hidden" name="edit-kind" value="">
+                                <input type="hidden" name="edit-id" value="">
+                                <label style="font-size:.75em;opacity:.7;">Title <input type="text" name="edit-title" required style="width:100%;"></label>
+                                <div style="display:flex;gap:.6em;">
+                                    <label style="flex:1;font-size:.75em;opacity:.7;">Start <input type="date" name="edit-start" required style="width:100%;"></label>
+                                    <label style="width:110px;font-size:.75em;opacity:.7;">Duration <input type="number" name="edit-duration" min="1" required style="width:100%;"></label>
+                                </div>
+                                <div style="display:flex;gap:.6em;align-items:center;flex-wrap:wrap;">
+                                    <label style="font-size:.7em;opacity:.8;display:flex;align-items:center;gap:4px;">Milestone <input type="checkbox" name="edit-milestone"></label>
+                                    <label style="font-size:.7em;opacity:.8;">Type
+                                        <select name="edit-internal-external" style="margin-left:4px;">
+                                            <option value="internal">Internal</option>
+                                            <option value="external">External</option>
+                                        </select>
+                                    </label>
+                                    <label style="flex:1;font-size:.7em;opacity:.8;">Dependencies
+                                        <input type="text" name="edit-dependencies" placeholder="IDs" style="width:100%;">
+                                    </label>
+                                </div>
+                                <label style="font-size:.7em;opacity:.8;">Notes
+                                    <textarea name="edit-notes" style="width:100%;min-height:60px;resize:vertical;"></textarea>
+                                </label>
+                                <div style="display:flex;gap:.5em;justify-content:flex-end;margin-top:.4em;">
+                                    <button type="button" id="unified-edit-cancel" style="background:#666;color:#fff;border:none;padding:.5em 1em;border-radius:6px;cursor:pointer;">Cancel</button>
+                                    <button type="submit" style="background:#FF8200;color:#fff;border:none;padding:.55em 1.2em;border-radius:6px;font-weight:600;cursor:pointer;">Save</button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                 </div>
                 <div id="calendar-view" style="display:none;">
@@ -284,67 +367,252 @@
                 </div>
             </div>
             <div id="planning-ui" style="background:rgba(255,255,255,0.03);border-radius:16px;padding:1em;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:1em;">
-                <div style="display:flex;gap:1em;flex-wrap:wrap;justify-content:space-between;">
-                    <form id="phase-form" action="/create_phase" method="post" style="flex:1;min-width:220px;max-width:260px;">
-                        <h4 style="margin-top:0;">Add Phase</h4>
-                        <input type="text" name="phase-title" placeholder="Phase Title" required>
-                        <input type="date" name="phase-start" required>
-                        <input type="number" name="phase-duration" placeholder="Duration (days)" required>
-                        <label style="display:block;margin-bottom:0.5em;"><input type="checkbox" name="phase-milestone"> Milestone</label>
-                        <select name="phase-type">
+                <form id="unified-part-form" action="/create_part" method="post" style="display:flex;flex-wrap:wrap;gap:0.75em;align-items:flex-end;">
+                    <div style="flex:1 1 160px;min-width:160px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Type</label>
+                        <select name="part-type" id="part-type" required style="width:100%;">
+                            <option value="phase">Phase</option>
+                            <option value="item">Item</option>
+                            <option value="subitem">Sub-Item</option>
+                        </select>
+                    </div>
+                    <div style="flex:2 1 220px;min-width:200px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Title</label>
+                        <input type="text" name="part-title" placeholder="Title" required style="width:100%;">
+                    </div>
+                    <div style="flex:1 1 140px;min-width:120px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Start</label>
+                        <input type="date" name="part-start" required style="width:100%;">
+                    </div>
+                    <div style="flex:0 0 110px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Duration (d)</label>
+                        <input type="number" name="part-duration" placeholder="Days" min="1" required style="width:100%;">
+                    </div>
+                    <div style="flex:0 0 120px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Internal/Ext</label>
+                        <select name="part-internal-external" style="width:100%;">
                             <option value="internal">Internal</option>
                             <option value="external">External</option>
                         </select>
-                        <select name="project-id" id="phase-parent-project" required>
-                            <option value="">Select Project</option>
+                    </div>
+                    <div id="project-select-wrapper" style="flex:1 1 160px;min-width:150px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Project (for Phase)</label>
+                        <select name="project-id" id="unified-project-id" style="width:100%;">
+                            <option value="">Project</option>
                             {% for project in projects %}
                             <option value="{{ project.id }}">{{ project.title }}</option>
                             {% endfor %}
                         </select>
-                                            <textarea name="phase-notes" placeholder="Notes" style="width:100%;min-height:60px;margin-top:4px;"></textarea>
-                        <button type="submit">Add</button>
-                    </form>
-                    <form id="item-form" action="/create_item" method="post" style="flex:1;min-width:220px;max-width:260px;">
-                        <h4 style="margin-top:0;">Add Item</h4>
-                        <input type="text" name="item-title" placeholder="Item Title" required>
-                        <input type="date" name="item-start" required>
-                        <input type="number" name="item-duration" placeholder="Duration (days)" required>
-                        <input type="text" name="item-dependencies" placeholder="Dependencies (IDs)">
-                        <label style="display:block;margin-bottom:0.5em;"><input type="checkbox" name="item-milestone"> Milestone</label>
-                        <select name="item-type">
-                            <option value="internal">Internal</option>
-                            <option value="external">External</option>
-                        </select>
-                        <select name="phase-id" id="item-parent-phase" required>
-                            <option value="">Select Phase</option>
+                    </div>
+                    <div id="phase-select-wrapper" style="flex:1 1 160px;min-width:150px;display:none;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Phase (for Item)</label>
+                        <select name="phase-id" id="unified-phase-id" style="width:100%;">
+                            <option value="">Phase</option>
                             {% for phase in phases %}
                             <option value="{{ phase.id }}">{{ phase.title }}</option>
                             {% endfor %}
                         </select>
-                                            <textarea name="item-notes" placeholder="Notes" style="width:100%;min-height:60px;margin-top:4px;"></textarea>
-                        <button type="submit">Add</button>
-                    </form>
-                    <form id="subitem-form" action="/create_subitem" method="post" style="flex:1;min-width:220px;max-width:260px;">
-                        <h4 style="margin-top:0;">Add Sub-Item</h4>
-                        <input type="text" name="subitem-title" placeholder="Sub-Item Title" required>
-                        <input type="date" name="subitem-start" required>
-                        <input type="number" name="subitem-duration" placeholder="Duration (days)" required>
-                        <input type="text" name="subitem-dependencies" placeholder="Dependencies (IDs)">
-                        <label style="display:block;margin-bottom:0.5em;"><input type="checkbox" name="subitem-milestone"> Milestone</label>
-                        <select name="subitem-type">
-                            <option value="internal">Internal</option>
-                            <option value="external">External</option>
-                        </select>
-                        <select name="item-id" id="subitem-parent-item" required>
-                            <option value="">Select Item</option>
+                    </div>
+                    <div id="item-select-wrapper" style="flex:1 1 160px;min-width:150px;display:none;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Item (for Sub-Item)</label>
+                        <select name="item-id" id="unified-item-id" style="width:100%;">
+                            <option value="">Item</option>
                             {% for item in items %}
                             <option value="{{ item.id }}">{{ item.title }}</option>
                             {% endfor %}
                         </select>
-                                            <textarea name="subitem-notes" placeholder="Notes" style="width:100%;min-height:60px;margin-top:4px;"></textarea>
-                        <button type="submit">Add</button>
-                    </form>
-                </div>
+                    </div>
+                    <div style="flex:1 1 200px;min-width:180px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Dependencies (IDs)</label>
+                        <input type="text" name="part-dependencies" placeholder="e.g. item-3, subitem-5" style="width:100%;">
+                    </div>
+                    <div style="flex:0 0 90px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Milestone</label>
+                        <input type="checkbox" name="part-milestone" style="transform:scale(1.2);margin-top:6px;">
+                    </div>
+                    <div style="flex:1 1 280px;min-width:240px;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Notes</label>
+                        <textarea name="part-notes" style="width:100%;min-height:44px;resize:vertical;"></textarea>
+                    </div>
+                    <div style="flex:0 0 120px;display:flex;gap:6px;">
+                        <button type="submit" style="background:#FF8200;color:#fff;border:none;padding:0.6em 1em;border-radius:8px;font-weight:600;cursor:pointer;">Add</button>
+                        <button type="reset" style="background:#555;color:#fff;border:none;padding:0.6em 1em;border-radius:8px;cursor:pointer;">Reset</button>
+                    </div>
+                </form>
+                                <script>
+                                                // Draft holding area script
+                                                const draftData = (function(){
+                                                    try { return JSON.parse((document.getElementById('draft-data')||{textContent:'[]'}).textContent || '[]'); }
+                                                    catch(e){ return []; }
+                                                })();
+                                function renderDrafts(){
+                                    const cont=document.getElementById('draft-bars'); if(!cont) return; cont.innerHTML='';
+                                    draftData.forEach(d=>{
+                                        const chip=document.createElement('div');
+                                        chip.className='draft-chip';
+                                        chip.dataset.id=d.id; chip.dataset.type=d.type;
+                                        chip.style.cssText='background:#aa0000;color:#fff;padding:4px 10px;border-radius:18px;font-size:11px;font-weight:600;letter-spacing:.5px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.25);';
+                                        chip.innerHTML='<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+d.title+'</span><span style="background:#fff;color:#aa0000;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">'+d.type+'</span>';
+                                        chip.title='Click to promote';
+                                        chip.addEventListener('click',()=> promptPromoteDraft(d));
+                                        cont.appendChild(chip);
+                                    });
+                                }
+                                document.addEventListener('DOMContentLoaded', renderDrafts);
+                                const draftForm=document.getElementById('draft-create-form');
+                                if(draftForm){ draftForm.addEventListener('submit', function(e){ e.preventDefault(); const fd=new FormData(draftForm); fetch('/create_draft_part',{method:'POST',body:fd}).then(r=>r.json()).then(resp=>{ if(resp.status==='ok'){ draftData.push(resp.draft); renderDrafts(); draftForm.reset(); } else { alert(resp.error||'Draft create failed'); } }); }); }
+                                function promptPromoteDraft(d){
+                                    // Minimal prompt-based promotion for now; will swap to nice modal later
+                                    const start = prompt('Start date (YYYY-MM-DD) for '+d.title+':'); if(!start) return;
+                                    const duration = prompt('Duration (days):', '1'); if(!duration) return;
+                                    let attach='';
+                                    if(d.type==='phase') { const pid=prompt('Project ID to attach Phase to:'); if(!pid) return; attach+='&project-id='+encodeURIComponent(pid); }
+                                    if(d.type==='item') { const ph=prompt('Phase ID to attach Item to:'); if(!ph) return; attach+='&phase-id='+encodeURIComponent(ph); }
+                                    if(d.type==='subitem') { const it=prompt('Item ID to attach SubItem to:'); if(!it) return; attach+='&item-id='+encodeURIComponent(it); }
+                                    fetch('/promote_draft/'+d.id,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'start-date='+encodeURIComponent(start)+'&duration='+encodeURIComponent(duration)+attach})
+                                                        .then(r=>r.json()).then(resp=>{
+                                                            if(resp.status==='ok'){
+                                                                 const idx=draftData.findIndex(x=>x.id===d.id); if(idx>-1){ draftData.splice(idx,1); renderDrafts(); }
+                                                                 if(window._ganttTasks && resp.task){ window._ganttTasks.push(resp.task); const gc=document.getElementById('gantt-chart'); if(gc) gc.innerHTML=''; window._ganttInstance=new Gantt('#gantt-chart', window._ganttTasks,{ view_mode:'Day', bar_height:24, custom_popup_html:null, on_click:window._ganttClickHandler, on_date_change:window._ganttDateChangeHandler }); applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0); }
+                                                                 if(resp.hierarchy_snippet){
+                                                                         insertPromotedSnippet(resp.part_type, resp.hierarchy_snippet, resp.parent_ids || {});
+                                                                 }
+                                                            } else { alert(resp.error||'Promotion failed'); }
+                                                        });
+                                }
+                (function(){
+                    const typeSel = document.getElementById('part-type');
+                    const projWrap = document.getElementById('project-select-wrapper');
+                    const phaseWrap = document.getElementById('phase-select-wrapper');
+                    const itemWrap = document.getElementById('item-select-wrapper');
+                    const form = document.getElementById('unified-part-form');
+                    const depInput = form.querySelector('input[name="part-dependencies"]');
+                    // Simple dependency suggestions store
+                    window._dependencyIds = window._dependencyIds || [];
+                    function updateVisibility(){
+                        const v = typeSel.value;
+                        projWrap.style.display = (v==='phase') ? 'block':'none';
+                        phaseWrap.style.display = (v==='item') ? 'block':'none';
+                        itemWrap.style.display = (v==='subitem') ? 'block':'none';
+                    }
+                    typeSel.addEventListener('change', updateVisibility);
+                    updateVisibility();
+
+                    function refreshDependencyPool(){
+                        // collect ids from current gantt tasks
+                        try {
+                            const tasks = window._ganttTasks || [];
+                            window._dependencyIds = tasks.map(t=> t.id);
+                        } catch(e){}
+                    }
+                    refreshDependencyPool();
+
+                    // Basic autocomplete dropdown
+                    const dropdown = document.createElement('div');
+                    dropdown.style.position='absolute';
+                    dropdown.style.background='#222';
+                    dropdown.style.border='1px solid #555';
+                    dropdown.style.zIndex='3000';
+                    dropdown.style.display='none';
+                    dropdown.style.maxHeight='160px';
+                    dropdown.style.overflowY='auto';
+                    dropdown.style.fontSize='12px';
+                    dropdown.style.minWidth='200px';
+                    document.body.appendChild(dropdown);
+                    function showDropdown(matches, anchor){
+                        if(!matches.length){ dropdown.style.display='none'; return; }
+                        dropdown.innerHTML='';
+                        matches.slice(0,25).forEach(m=>{
+                            const opt=document.createElement('div');
+                            opt.textContent=m; opt.style.padding='4px 6px'; opt.style.cursor='pointer';
+                            opt.onmouseover=()=> opt.style.background='#333';
+                            opt.onmouseout=()=> opt.style.background='transparent';
+                            opt.onclick=()=>{
+                                const existing = depInput.value.trim();
+                                if(existing){ depInput.value = existing.replace(/[,;]\s*$/,'') + ', ' + m; }
+                                else { depInput.value = m; }
+                                dropdown.style.display='none'; depInput.focus();
+                            };
+                            dropdown.appendChild(opt);
+                        });
+                        const rect = anchor.getBoundingClientRect();
+                        dropdown.style.left = rect.left + window.scrollX + 'px';
+                        dropdown.style.top = (rect.bottom + window.scrollY) + 'px';
+                        dropdown.style.display='block';
+                    }
+                    depInput.addEventListener('input', function(){
+                        const val = this.value.split(/[,;]/).pop().trim().toLowerCase();
+                        if(!val){ dropdown.style.display='none'; return; }
+                        const matches = (window._dependencyIds||[]).filter(id=> id.toLowerCase().includes(val));
+                        showDropdown(matches, this);
+                    });
+                    document.addEventListener('click', (e)=>{ if(!dropdown.contains(e.target) && e.target!==depInput) dropdown.style.display='none'; });
+
+                    form.addEventListener('submit', function(ev){
+                        ev.preventDefault();
+                        const fd = new FormData(form);
+                        fetch('/create_part', { method:'POST', body: fd, headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
+                        .then(r=> r.json().then(j=>({ok:r.ok,data:j})))
+                        .then(resp=>{
+                            if(!resp.ok){ alert(resp.data && resp.data.error ? resp.data.error : 'Create failed'); return; }
+                            const t = resp.data.task;
+                            if(!t){ return; }
+                            // Update internal tasks list
+                            if(!Array.isArray(window._ganttTasks)) window._ganttTasks=[];
+                            window._ganttTasks.push(t);
+                            // Re-render gantt quickly
+                            const gc=document.getElementById('gantt-chart'); if(gc) gc.innerHTML='';
+                            window._ganttInstance = new Gantt('#gantt-chart', window._ganttTasks, { view_mode:'Day', bar_height:24, custom_popup_html:null, on_click:window._ganttClickHandler, on_date_change:window._ganttDateChangeHandler });
+                            applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0);
+                            // Update critical path display
+                            if(resp.data.critical_path){
+                                document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
+                                resp.data.critical_path.forEach(id=>{ const bar=document.querySelector(`.gantt .bar[data-id="${id}"]`); if(bar) bar.classList.add('critical-path'); });
+                                const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=resp.data.critical_path.join(' → ');
+                            }
+                            // Insert hierarchy snippet
+                            if(resp.data.hierarchy_snippet){
+                                if(resp.data.part_type==='phase'){
+                                    // append to each matching project block if project id matches
+                                    const projId = resp.data.parent_ids && resp.data.parent_ids.project_id;
+                                    if(projId){
+                                        const projBlock = document.querySelector(`.project-block .assoc-node[data-type="project"][data-id="${projId}"]`);
+                                        if(projBlock){
+                                            let childContainer = projBlock.parentElement.querySelector(':scope > .tree-children');
+                                            if(childContainer){ childContainer.insertAdjacentHTML('beforeend', resp.data.hierarchy_snippet); }
+                                        }
+                                    }
+                                } else if(resp.data.part_type==='item') {
+                                    const phaseChildren = document.querySelector(`div.tree-children [data-type="phase"][data-id="${resp.data.parent_ids.phase_id}"]`);
+                                    if(phaseChildren){
+                                        // Need its sibling tree-children after phase node line
+                                        const wrapper = phaseChildren.parentElement; // node-line container
+                                        const tc = wrapper.nextElementSibling; // children container
+                                        if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', resp.data.hierarchy_snippet);
+                                    }
+                                } else if(resp.data.part_type==='subitem') {
+                                    const itemNode = document.querySelector(`div.tree-children [data-type="item"][data-id="${resp.data.parent_ids.item_id}"]`);
+                                    if(itemNode){
+                                        const wrapper = itemNode.parentElement;
+                                        const tc = wrapper.nextElementSibling;
+                                        if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', resp.data.hierarchy_snippet);
+                                    }
+                                }
+                            }
+                            // Update dependency pool and calendar
+                            refreshDependencyPool();
+                            if(window._calendarInstance){
+                                try {
+                                    const calEnd = new Date(t.end + 'T00:00:00Z'); calEnd.setDate(calEnd.getDate()+1);
+                                    window._calendarInstance.addEvent({ id:t.id, title:t.name, start:t.start, end:calEnd.toISOString().slice(0,10), color: /external-bar/.test(t.custom_class)? '#4B4B4B':'#FF8200' });
+                                } catch(e){}
+                            }
+                            form.reset();
+                            typeSel.value='phase'; updateVisibility();
+                        }).catch(()=> alert('Network error creating part'));
+                    });
+                })();
+                </script>
                 <div id="planning-hierarchy">
                     <h3>Project Hierarchy</h3>
                     <style>
@@ -488,6 +756,7 @@
                 </script>
                 <!-- Hidden Gantt data for script parsing -->
                 <script id="gantt-data" type="application/json">{{ gantt_json_js|safe }}</script>
+                <script id="draft-data" type="application/json">{{ draft_json_js|safe if draft_json_js is defined else '[]' }}</script>
                 <script id="cp-data" type="application/json">{{ critical_path_ids | tojson }}</script>
                 <script id="calendar-events-data" type="application/json">{{ calendar_events_json|safe }}</script>
                 <!-- Removed duplicate Gantt Chart container -->
@@ -507,6 +776,8 @@ function renderGantt(){
         var cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent='None';
         return;
     }
+    // Preserve original full set for filtering
+    window._allGanttTasks = tasks.slice();
     if(typeof Gantt !== 'function'){
         document.getElementById('gantt-chart').innerHTML='<p style="color:red;text-align:center;">Gantt library not loaded</p>';
         return;
@@ -514,83 +785,57 @@ function renderGantt(){
     // Backend already annotated critical path classes. Use provided list to show sequence.
     var cpProvided = (function(){ try { return JSON.parse(document.getElementById('cp-data').textContent)||[]; } catch(e){ return []; } })();
     var cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent = cpProvided.length? cpProvided.join(' → ') : 'None';
-    new Gantt('#gantt-chart', tasks, {
-        view_mode:'Day',
-        bar_height:24,
-        custom_popup_html:null,
-        on_click:function(task){
+    // Global handlers stored for reuse after cascade re-renders
+    window._ganttTasks = tasks;
+    window._ganttClickHandler = function(task){
+        try {
+            if(!task || !task.id) return;
+            let type = null; let rawId = null;
+            if(task.id.startsWith('phase-')) { type='phase'; rawId=parseInt(task.id.replace('phase-','')); }
+            else if(task.id.startsWith('item-')) { type='item'; rawId=parseInt(task.id.replace('item-','')); }
+            else if(task.id.startsWith('subitem-')) { type='subitem'; rawId=parseInt(task.id.replace('subitem-','')); }
+            if(type && !isNaN(rawId)) {
+                document.querySelectorAll('.assoc-node.selected-node').forEach(n=> n.classList.remove('selected-node'));
+                const node = document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rawId}"]`);
+                if(node) node.classList.add('selected-node');
+                loadAssociatedThumbnails(type, rawId);
+            }
+        } catch(e){ console.error('Gantt click handler error', e); }
+    };
+    window._ganttDateChangeHandler = function(task,start,end){
+        const s = start.toISOString().slice(0,10);
+        const e = end.toISOString().slice(0,10);
+        fetch('/update_gantt_task',{
+            method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:task.id,start:s,end:e})
+        }).then(r=> r.json().then(j=>({ok:r.ok,data:j}))).then(resp=>{
+            if(!resp.ok){ alert('Error updating task'); return; }
             try {
-                if(!task || !task.id) return;
-                let type = null; let rawId = null;
-                if(task.id.startsWith('phase-')) { type='phase'; rawId=parseInt(task.id.replace('phase-','')); }
-                else if(task.id.startsWith('item-')) { type='item'; rawId=parseInt(task.id.replace('item-','')); }
-                else if(task.id.startsWith('subitem-')) { type='subitem'; rawId=parseInt(task.id.replace('subitem-','')); }
-                if(type && !isNaN(rawId)) {
-                    // highlight matching hierarchy node
-                    document.querySelectorAll('.assoc-node.selected-node').forEach(n=> n.classList.remove('selected-node'));
-                    const node = document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rawId}"]`);
-                    if(node) node.classList.add('selected-node');
-                    loadAssociatedThumbnails(type, rawId);
+                let nodeSel = null;
+                if(task.id.startsWith('phase-')) nodeSel = `.assoc-node[data-type="phase"][data-id="${task.id.replace('phase-','')}"]`;
+                else if(task.id.startsWith('item-')) nodeSel = `.assoc-node[data-type="item"][data-id="${task.id.replace('item-','')}"]`;
+                else if(task.id.startsWith('subitem-')) nodeSel = `.assoc-node[data-type="subitem"][data-id="${task.id.replace('subitem-','')}"]`;
+                if(nodeSel){ const node=document.querySelector(nodeSel); if(node){ const meta=node.querySelector('.meta'); if(meta){ meta.textContent = `${s} / ${resp.data.duration}d`; } } }
+                if(window._calendarInstance){
+                    const evt = window._calendarInstance.getEventById(task.id);
+                    if(evt){ evt.setStart(s); const endObj=new Date(e); endObj.setDate(endObj.getDate()+1); evt.setEnd(endObj.toISOString().slice(0,10)); }
                 }
-            } catch(e){ console.error('Gantt click handler error', e); }
-        },
-    on_date_change:function(task,start,end){
-            const s = start.toISOString().slice(0,10);
-            const e = end.toISOString().slice(0,10);
-            fetch('/update_gantt_task',{
-                method:'POST',
-                headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({id:task.id,start:s,end:e})
-            }).then(r=> r.json().then(j=>({ok:r.ok,data:j})))
-            .then(resp=>{
-                if(!resp.ok){ alert('Error updating task'); return; }
-                // Update hierarchy node text (dates/duration)
-                try {
-                    let nodeSel = null;
-                    if(task.id.startsWith('phase-')) nodeSel = `.assoc-node[data-type="phase"][data-id="${task.id.replace('phase-','')}"]`;
-                    else if(task.id.startsWith('item-')) nodeSel = `.assoc-node[data-type="item"][data-id="${task.id.replace('item-','')}"]`;
-                    else if(task.id.startsWith('subitem-')) nodeSel = `.assoc-node[data-type="subitem"][data-id="${task.id.replace('subitem-','')}"]`;
-                    if(nodeSel){
-                        const node = document.querySelector(nodeSel);
-                        if(node){
-                            const meta = node.querySelector('.meta');
-                            if(meta){ meta.textContent = `${s} / ${resp.data.duration}d`; }
-                        }
-                    }
-                    // Update calendar event if present
-                    if(window._calendarInstance){
-                        const evt = window._calendarInstance.getEventById(task.id);
-                        if(evt){
-                            evt.setStart(s);
-                            // FullCalendar is exclusive end; supply end date +1 day for proper span if multi-day
-                            const endObj = new Date(e);
-                            endObj.setDate(endObj.getDate()+1);
-                            evt.setEnd(endObj.toISOString().slice(0,10));
-                        }
-                    }
-                    // Update timeline (rebuild lightweight)
-                    try { refreshTimeline(); } catch(err) { /* ignore */ }
-                    // Re-highlight critical path bars
-                    if(resp.data.critical_path){
-                        // Remove existing critical-path class first
-                        document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
-                        resp.data.critical_path.forEach(id=>{
-                            const bar = document.querySelector(`.gantt .bar[data-id="${id}"]`);
-                            if(bar) bar.classList.add('critical-path');
-                        });
-                        const cpEl = document.getElementById('critical-path-list');
-                        if(cpEl) cpEl.textContent = resp.data.critical_path.join(' → ');
-                    }
-                    applyHierarchyVisuals();
-                    // If backend cascaded dependent tasks, force a quick re-render to reflect updated dates
-                    if(resp.data.cascade && resp.data.cascade.length){
-                        // Simple strategy: reload full page to refresh gantt-data JSON (keeps logic simple)
-                        setTimeout(()=>{ window.location.reload(); }, 300);
-                    }
-                } catch(err){ console.error('Propagation error', err); }
-            }).catch(()=> alert('Network error updating task'));
-        }
-    });
+                if(Array.isArray(window._ganttTasks)){
+                    const tObj = window._ganttTasks.find(t=> t.id===task.id); if(tObj){ tObj.start=s; tObj.end=e; }
+                }
+                try { refreshTimeline(); } catch(err){}
+                if(resp.data.critical_path){
+                    document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
+                    resp.data.critical_path.forEach(id=>{ const bar=document.querySelector(`.gantt .bar[data-id="${id}"]`); if(bar) bar.classList.add('critical-path'); });
+                    const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=resp.data.critical_path.join(' → ');
+                }
+                applyHierarchyVisuals();
+                if(resp.data.cascade && resp.data.cascade.length){
+                    inPlaceCascadeApply(resp.data.cascade, resp.data.critical_path || []);
+                }
+            } catch(err){ console.error('Propagation error', err); }
+        }).catch(()=> alert('Network error updating task'));
+    };
+    window._ganttInstance = new Gantt('#gantt-chart', tasks, { view_mode:'Day', bar_height:24, custom_popup_html:null, on_click:window._ganttClickHandler, on_date_change:window._ganttDateChangeHandler });
     applyHierarchyVisuals();
     enforceBarColors();
     setTimeout(addLaneBands, 0); // draw subtle category bands after initial render
@@ -599,6 +844,207 @@ document.addEventListener('DOMContentLoaded', function() { renderGantt(); });
 /* Removed incomplete window.showView assignment to fix syntax error */
 </script>
 <script>
+// Apply cascade adjustments in-place: update internal task list, recreate gantt instance
+function inPlaceCascadeApply(adjustments, newCriticalPath){
+    if(!Array.isArray(adjustments) || !adjustments.length) return;
+    // Update internal task data
+    adjustments.forEach(adj=>{
+        if(!adj || !adj.id) return;
+        const task = window._ganttTasks && window._ganttTasks.find(t=> t.id===adj.id);
+        if(task){
+            task.start = adj.start;
+            // Derive end from start + duration
+            try {
+                const d = new Date(adj.start + 'T00:00:00Z');
+                d.setDate(d.getDate() + (adj.duration||0));
+                task.end = d.toISOString().slice(0,10);
+            } catch(e){}
+        }
+        // Update hierarchy meta display
+        let nodeSel=null;
+        if(adj.id.startsWith('phase-')) nodeSel = `.assoc-node[data-type="phase"][data-id="${adj.id.replace('phase-','')}"]`;
+        else if(adj.id.startsWith('item-')) nodeSel = `.assoc-node[data-type="item"][data-id="${adj.id.replace('item-','')}"]`;
+        else if(adj.id.startsWith('subitem-')) nodeSel = `.assoc-node[data-type="subitem"][data-id="${adj.id.replace('subitem-','')}"]`;
+        if(nodeSel){
+            const node=document.querySelector(nodeSel);
+            if(node){
+                const meta=node.querySelector('.meta');
+                if(meta){ meta.textContent = `${adj.start} / ${adj.duration}d`; }
+            }
+        }
+        // Update calendar events
+        if(window._calendarInstance){
+            const evt = window._calendarInstance.getEventById(adj.id);
+            if(evt){
+                evt.setStart(adj.start);
+                try {
+                    const eDate = new Date(adj.start + 'T00:00:00Z');
+                    eDate.setDate(eDate.getDate()+ (adj.duration||0));
+                    eDate.setDate(eDate.getDate()+1); // exclusive end
+                    evt.setEnd(eDate.toISOString().slice(0,10));
+                } catch(e){}
+            }
+        }
+    });
+    // Re-render gantt to reposition bars
+    const container = document.querySelector('#gantt-chart');
+    if(container){ container.innerHTML=''; }
+    window._ganttInstance = new Gantt('#gantt-chart', window._ganttTasks, {
+        view_mode:'Day', bar_height:24, custom_popup_html:null,
+        on_click: window._ganttClickHandler || function(){},
+        on_date_change: window._ganttDateChangeHandler || function(){}
+    });
+    // Reapply visuals
+    applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0);
+    if(newCriticalPath && newCriticalPath.length){
+        document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
+        newCriticalPath.forEach(id=>{
+            const bar=document.querySelector(`.gantt .bar[data-id="${id}"]`); if(bar) bar.classList.add('critical-path');
+        });
+        const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=newCriticalPath.join(' → ');
+    }
+}
+// Hierarchy insertion helpers
+function insertHierarchySnippet(partType, snippet, parents){
+    if(!snippet) return;
+    if(partType==='phase'){
+        const projectId = parents && parents.project_id;
+        if(projectId){
+            const projectNode = document.querySelector(`.project-block .assoc-node[data-type="project"][data-id="${projectId}"]`);
+            if(projectNode){
+                const treeChildren = projectNode.parentElement.querySelector(':scope > .tree-children');
+                if(treeChildren){ treeChildren.insertAdjacentHTML('beforeend', snippet); }
+            }
+        }
+    } else if(partType==='item'){
+        const phaseId = parents && parents.phase_id;
+        if(phaseId){
+            const phaseNode = document.querySelector(`.assoc-node[data-type="phase"][data-id="${phaseId}"]`);
+            if(phaseNode){
+                // The next sibling .tree-children contains its items
+                let sib = phaseNode.parentElement.nextElementSibling;
+                if(sib && sib.classList.contains('tree-children')){ sib.insertAdjacentHTML('beforeend', snippet); }
+            }
+        }
+    } else if(partType==='subitem'){
+        const itemId = parents && parents.item_id;
+        if(itemId){
+            const itemNode = document.querySelector(`.assoc-node[data-type="item"][data-id="${itemId}"]`);
+            if(itemNode){
+                let sib = itemNode.parentElement.nextElementSibling;
+                if(sib && sib.classList.contains('tree-children')){ sib.insertAdjacentHTML('beforeend', snippet); }
+            }
+        }
+    }
+}
+
+// Insert promoted draft snippet (reuse existing logic with slight fallback)
+function insertPromotedSnippet(partType, snippet, parents){
+    if(!snippet) return;
+    try { insertHierarchySnippet(partType, snippet, parents); return; } catch(e){}
+    // Fallback: simple append to matching container
+    if(partType==='phase'){
+        const projId = parents && parents.project_id; if(projId){
+            const projNode=document.querySelector(`.project-block .assoc-node[data-type="project"][data-id="${projId}"]`);
+            if(projNode){ const tc=projNode.parentElement.querySelector(':scope > .tree-children'); if(tc) tc.insertAdjacentHTML('beforeend', snippet); }
+        }
+    } else if(partType==='item'){
+        const phaseId = parents && parents.phase_id; if(phaseId){
+            const phaseNode=document.querySelector(`.assoc-node[data-type="phase"][data-id="${phaseId}"]`);
+            if(phaseNode){ const tc=phaseNode.parentElement.nextElementSibling; if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', snippet); }
+        }
+    } else if(partType==='subitem'){
+        const itemId = parents && parents.item_id; if(itemId){
+            const itemNode=document.querySelector(`.assoc-node[data-type="item"][data-id="${itemId}"]`);
+            if(itemNode){ const tc=itemNode.parentElement.nextElementSibling; if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', snippet); }
+        }
+    }
+}
+
+// Edit modal reuse logic
+function openEditModal(kind, id){
+    const modal = document.getElementById('unified-edit-modal');
+    if(!modal) return;
+    const form = document.getElementById('unified-edit-form');
+    form.reset();
+    form.elements['edit-kind'].value = kind;
+    form.elements['edit-id'].value = id;
+    // Pre-fill from hierarchy meta (lightweight parse)
+    let node = document.querySelector(`.assoc-node[data-type="${kind}"][data-id="${id}"]`);
+    if(node){
+        const meta = node.querySelector('.meta');
+        const titleRaw = node.textContent || '';
+        // Basic extraction: after 'Phase:' / 'Item:' / 'Sub:' prefix
+        let title = titleRaw.replace(/^[^:]+:\s*/,'').trim();
+        if(meta){
+            // meta contains start / duration
+            const parts = (meta.textContent||'').split('/');
+            if(parts.length===2){
+                form.elements['edit-start'].value = parts[0].trim();
+                form.elements['edit-duration'].value = parts[1].trim().replace(/d$/,'');
+            }
+        }
+        form.elements['edit-title'].value = title;
+    }
+    modal.style.display='flex';
+}
+function closeEditModal(){ const modal=document.getElementById('unified-edit-modal'); if(modal) modal.style.display='none'; }
+document.addEventListener('click', function(e){
+    if(e.target && e.target.matches('.actions button.small[data-edit-kind]')){
+        const kind=e.target.getAttribute('data-edit-kind');
+        const id=e.target.getAttribute('data-edit-id');
+        openEditModal(kind,id);
+    }
+});
+document.getElementById('unified-edit-close').onclick = closeEditModal;
+document.getElementById('unified-edit-cancel').onclick = closeEditModal;
+document.getElementById('unified-edit-form').addEventListener('submit', function(ev){
+    ev.preventDefault();
+    const kind = this.elements['edit-kind'].value;
+    const id = this.elements['edit-id'].value;
+    const payload = new FormData(this);
+    // Map to existing endpoints
+    let url=null;
+    if(kind==='phase') url='/edit_phase/'+id; else if(kind==='item') url='/edit_item/'+id; else if(kind==='subitem') url='/edit_subitem/'+id;
+    if(!url) return;
+    fetch(url, {method:'POST', body:payload})
+    .then(()=>{ window.location.reload(); })
+    .catch(()=>{ alert('Edit failed'); });
+});
+
+// Dependency picker with labels
+function buildDependencyPicker(){
+    const depInput = document.querySelector('input[name="part-dependencies"]');
+    if(!depInput) return; // unified form input
+    const wrapper = document.createElement('div');
+    wrapper.style.position='relative';
+    depInput.parentElement.style.position='relative';
+    const panel = document.createElement('div');
+    panel.style.position='absolute'; panel.style.left='0'; panel.style.top='100%'; panel.style.zIndex='3100';
+    panel.style.background='#222'; panel.style.border='1px solid #555'; panel.style.padding='4px'; panel.style.borderRadius='6px';
+    panel.style.width='260px'; panel.style.maxHeight='220px'; panel.style.overflowY='auto'; panel.style.display='none';
+    panel.id='dependency-picker-panel';
+    depInput.parentElement.appendChild(panel);
+    depInput.addEventListener('focus', ()=>{ refreshPanel(); panel.style.display='block'; });
+    document.addEventListener('click', e=>{ if(!panel.contains(e.target) && e.target!==depInput) panel.style.display='none'; });
+    function refreshPanel(){
+        panel.innerHTML='';
+        const tasks = window._ganttTasks || [];
+        tasks.forEach(t=>{
+            const btn=document.createElement('div');
+            btn.textContent = `${t.id}  •  ${t.name}`; btn.style.padding='4px 6px'; btn.style.cursor='pointer'; btn.style.fontSize='11px'; btn.style.color='#eee';
+            btn.onmouseover=()=> btn.style.background='#333'; btn.onmouseout=()=> btn.style.background='transparent';
+            btn.onclick=()=>{
+                const existing = depInput.value.trim();
+                const addVal = t.id;
+                if(existing){ depInput.value = existing.split(/[,;]\s*/).filter(Boolean).includes(addVal)? existing : existing + ', ' + addVal; }
+                else { depInput.value = addVal; }
+            };
+            panel.appendChild(btn);
+        });
+    }
+}
+document.addEventListener('DOMContentLoaded', buildDependencyPicker);
 function addLaneBands(){
                         const svg = document.querySelector('#gantt-chart svg');
                         if(!svg) return;
@@ -1039,7 +1485,7 @@ function addLaneBands(){
             });
         }
         // Enforce bar colors if classes applied only to wrapper
-        function enforceBarColors(){
+    function enforceBarColors(){
             const svg = document.querySelector('#gantt-chart svg');
             if(!svg) return;
             svg.querySelectorAll('.bar-wrapper').forEach(w=>{
@@ -1055,6 +1501,152 @@ function addLaneBands(){
                 }
             });
         }
+                // --- Drag & Drop Hierarchy Ordering (basic) ---
+                (function(){
+                    const container=document.getElementById('planning-hierarchy'); if(!container) return;
+                    let dragEl=null; let placeholder=document.createElement('div');
+                    placeholder.style.height='6px'; placeholder.style.margin='2px 0'; placeholder.style.background='#FF8200'; placeholder.style.borderRadius='3px';
+                    container.addEventListener('dragstart', e=>{
+                        const node=e.target.closest('.node-line.assoc-node'); if(!node) return; dragEl=node; e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', node.dataset.type+':'+node.dataset.id);
+                        node.style.opacity='0.4';
+                    });
+                    container.addEventListener('dragend', e=>{ if(dragEl){ dragEl.style.opacity=''; dragEl=null; } placeholder.remove(); });
+                    container.querySelectorAll('.node-line.assoc-node').forEach(n=> n.setAttribute('draggable','true'));
+                    container.addEventListener('dragover', e=>{
+                        if(!dragEl) return; const over=e.target.closest('.node-line.assoc-node'); if(!over || over===dragEl) return; e.preventDefault();
+                        const rect=over.getBoundingClientRect(); const after=(e.clientY-rect.top) > rect.height/2; const parent=over.parentElement.parentElement; // wrapper -> tree-children
+                        if(after) over.parentElement.after(placeholder); else over.parentElement.before(placeholder);
+                    });
+                    container.addEventListener('drop', e=>{
+                        if(!dragEl || !placeholder.parentElement) return; e.preventDefault();
+                        const wrapper=dragEl.parentElement; placeholder.replaceWith(wrapper);
+                        // Determine new order & call backend
+                        const type=dragEl.dataset.type; const id=dragEl.dataset.id; let siblings=[]; let parentId=null; let endpoint=null;
+                        if(type==='phase'){
+                            endpoint='/reorder_phase';
+                            const projectBlock=dragEl.closest('.project-block'); parentId=projectBlock && projectBlock.querySelector('.assoc-node[data-type="project"]').dataset.id;
+                            siblings=[...projectBlock.querySelectorAll('.node-line.assoc-node[data-type="phase"]')];
+                        } else if(type==='item'){
+                            endpoint='/reorder_item'; const phaseWrapper=findAncestorOfType(dragEl,'phase'); parentId=phaseWrapper? phaseWrapper.dataset.id:null; siblings=[...phaseWrapper.closest('[data-wrapper^="phase-"]').querySelectorAll('.node-line.assoc-node[data-type="item"]')];
+                        } else if(type==='subitem'){
+                            endpoint='/reorder_subitem'; const itemWrapper=findAncestorOfType(dragEl,'item'); parentId=itemWrapper? itemWrapper.dataset.id:null; siblings=[...itemWrapper.closest('[data-wrapper^="item-"]').querySelectorAll('.node-line.assoc-node[data-type="subitem"]')];
+                        }
+                        const newPos=siblings.findIndex(n=> n===dragEl);
+                        if(endpoint && newPos>-1){
+                            let payload={};
+                            if(type==='phase') payload={phase_id:id, project_id:parentId, new_position:newPos};
+                            if(type==='item') payload={item_id:id, phase_id:parentId, new_position:newPos};
+                            if(type==='subitem') payload={subitem_id:id, item_id:parentId, new_position:newPos};
+                            fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+                                .then(r=>r.json()).then(resp=>{ if(resp.status!=='ok') console.warn('Reorder failed', resp); });
+                        }
+                    });
+                    function findAncestorOfType(node,type){
+                        let cur=node;
+                        while(cur){ if(cur.classList && cur.classList.contains('assoc-node') && cur.dataset.type===type) return cur; cur=cur.parentElement; }
+                        return null;
+                    }
+                })();
+                        // Active users polling
+                        (function(){
+                             const chipsEl = document.getElementById('active-user-chips');
+                             if(!chipsEl) return;
+                             function refreshActive(){
+                                 fetch('/active_users').then(r=>r.json()).then(j=>{
+                                     if(!Array.isArray(j.users)) return; const me='{{ current_user.username }}';
+                                     chipsEl.innerHTML = j.users.filter(u=>u!==me).map(u=>`<span class='active-chip' style='background:#555;color:#fff;padding:2px 6px;border-radius:12px;margin-right:4px;'>${u}</span>`).join('');
+                                 }).catch(()=>{});
+                             }
+                             setInterval(refreshActive, 20000);
+                        })();
+                        // --- Critical Path filtering & enhancements ---
+                  (function(){
+                      const btnOnly=document.getElementById('btn-critical-only');
+                      const btnAll=document.getElementById('btn-critical-all');
+                      if(!btnOnly||!btnAll) return;
+                      function criticalIds(){
+                         try { return (JSON.parse(document.getElementById('cp-data').textContent)||[]);} catch(e){ return []; }
+                      }
+                             function applyBadges(){
+                                 const cp = criticalIds(); const orderMap={}; cp.forEach((id,i)=> orderMap[id]=i+1);
+                                 document.querySelectorAll('.assoc-node .crit-badge').forEach(b=> b.remove());
+                                 cp.forEach(id=>{
+                                     let type=null; if(id.startsWith('phase-')) type='phase'; else if(id.startsWith('item-')) type='item'; else if(id.startsWith('subitem-')) type='subitem';
+                                     if(!type) return; const rid=id.split('-')[1];
+                                     const node=document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rid}"]`);
+                                     if(node){
+                                         const badge=document.createElement('span');
+                                         badge.className='crit-badge';
+                                         badge.textContent=orderMap[id];
+                                         badge.style.cssText='margin-left:6px;background:#d90000;color:#fff;font-size:10px;font-weight:700;min-width:18px;text-align:center;padding:2px 5px;border-radius:10px;box-shadow:0 0 4px rgba(217,0,0,0.4);transition:transform .25s, background .25s;';
+                                         node.appendChild(badge);
+                                     }
+                                 });
+                             }
+                      function rebuild(tasks){
+                         const gc=document.getElementById('gantt-chart'); if(gc) gc.innerHTML='';
+                         window._ganttTasks = tasks.slice();
+                         window._ganttInstance = new Gantt('#gantt-chart', window._ganttTasks, { view_mode:'Day', bar_height:24, custom_popup_html:null, on_click:window._ganttClickHandler, on_date_change:window._ganttDateChangeHandler });
+                         applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0);
+                         // Dim hierarchy & calendar for non-critical when filtering
+                         if(window._criticalFilterActive){
+                             const cpSet = new Set(criticalIds());
+                                        document.querySelectorAll('.assoc-node').forEach(n=>{
+                                 const type=n.dataset.type; const id=n.dataset.id; if(['phase','item','subitem'].includes(type)){
+                                                    const taskId=type+'-'+id; if(!cpSet.has(taskId)) n.style.opacity='0.15'; else n.style.opacity='1';
+                                 }
+                             });
+                             if(window._calendarInstance){
+                                             window._calendarInstance.getEvents().forEach(ev=>{ if(!cpSet.has(ev.id)) ev.setProp('display','auto'); });
+                             }
+                                        ghostNonCriticalBars();
+                         } else {
+                             document.querySelectorAll('.assoc-node').forEach(n=> n.style.opacity='');
+                                        if(window._calendarInstance){ window._calendarInstance.getEvents().forEach(ev=> ev.setProp('display','auto')); }
+                                        unghostBars();
+                         }
+                                 applyBadges();
+                      }
+                             function ghostNonCriticalBars(){
+                                 const cpSet=new Set(criticalIds());
+                                 const svg=document.querySelector('#gantt-chart svg'); if(!svg) return;
+                                 svg.querySelectorAll('.bar-wrapper').forEach(w=>{
+                                     const rect=w.querySelector('.bar'); if(!rect) return; const id=rect.getAttribute('data-id');
+                                     if(!cpSet.has(id)){
+                                         rect.style.fillOpacity='0.12'; rect.style.strokeOpacity='0.15';
+                                     } else { rect.style.fillOpacity='1'; rect.style.strokeOpacity='1'; }
+                                 });
+                             }
+                             function unghostBars(){
+                                 const svg=document.querySelector('#gantt-chart svg'); if(!svg) return;
+                                 svg.querySelectorAll('.bar-wrapper .bar').forEach(r=>{ r.style.fillOpacity='1'; r.style.strokeOpacity='1'; });
+                             }
+                      btnOnly.addEventListener('click', function(){
+                         if(window._criticalFilterActive) return; window._criticalFilterActive=true;
+                         const ids=new Set(criticalIds());
+                         const filtered=(window._allGanttTasks||[]).filter(t=> ids.has(t.id));
+                         rebuild(filtered);
+                         btnOnly.style.display='none'; btnAll.style.display='inline-block';
+                                 persistFilterState('on');
+                      });
+                      btnAll.addEventListener('click', function(){
+                         window._criticalFilterActive=false; rebuild(window._allGanttTasks||[]);
+                         btnAll.style.display='none'; btnOnly.style.display='inline-block';
+                                 persistFilterState('off');
+                      });
+                      // If critical path updates externally, reapply filter
+                      window._refreshCriticalFilter = function(){ if(window._criticalFilterActive){ const ids=new Set(criticalIds()); const filtered=(window._allGanttTasks||[]).filter(t=> ids.has(t.id)); rebuild(filtered);} };
+                             function persistFilterState(state){ fetch('/set_critical_filter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state})}).catch(()=>{}); }
+                             // Apply saved state on load
+                               const saved = "{{ 'on' if critical_filter_active else 'off' }}";
+                             if(saved==='on'){ setTimeout(()=>{ btnOnly.click(); }, 50); }
+                             // Transition styling
+                             const style=document.createElement('style'); style.textContent=`
+                                 .assoc-node { transition: opacity .35s ease; }
+                                 .gantt .bar { transition: fill-opacity .35s ease, stroke-opacity .35s ease; }
+                                 .crit-badge:hover { transform: scale(1.15); background:#a80000 !important; }
+                             `; document.head.appendChild(style);
+                  })();
         // (No mutation observer for lane layout to avoid repeated upward shifts)
         function openEditModal(type, id, title, start, duration, milestone, internal_external, dependencies) {
             event.stopPropagation();

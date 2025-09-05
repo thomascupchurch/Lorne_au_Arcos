@@ -2,7 +2,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, send_from_directory, current_app, send_file, session
 import os
 from werkzeug.utils import secure_filename
-from app.models import db, User, Project, Phase, Item, SubItem, Image
+from app.models import db, User, Project, Phase, Item, SubItem, Image, DraftPart, UserSession
 from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
@@ -189,6 +189,57 @@ main = Blueprint('main', __name__, url_prefix='')
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'uploads')
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'pdf'}
 
+# --- Simple active user presence tracking (memory-only) ---
+from time import time as _time
+from datetime import datetime as _dt, timedelta as _td
+import uuid as _uuid
+
+SESSION_TIMEOUT_MINUTES = 15
+
+@main.before_app_request
+def _track_presence():
+    from flask_login import current_user as _cu
+    if not getattr(_cu, 'is_authenticated', False):
+        return
+    now = _dt.utcnow()
+    # Persist user last_seen
+    try:
+        _cu.last_seen = now
+        # Ensure a session UUID stored in flask session
+        sid = session.get('presence_session_id')
+        if not sid:
+            sid = _uuid.uuid4().hex
+            session['presence_session_id'] = sid
+            us = UserSession(user_id=_cu.id, session_uuid=sid, last_seen=now)
+            db.session.add(us)
+        else:
+            us = UserSession.query.filter_by(session_uuid=sid).first()
+            if not us:
+                us = UserSession(user_id=_cu.id, session_uuid=sid, last_seen=now)
+                db.session.add(us)
+            else:
+                us.last_seen = now
+        # Cleanup stale sessions (older than timeout)
+        cutoff = now - _td(minutes=SESSION_TIMEOUT_MINUTES)
+        try:
+            UserSession.query.filter(UserSession.last_seen < cutoff).delete(synchronize_session=False)
+        except Exception:
+            pass
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+def _get_active_usernames():
+    cutoff = _dt.utcnow() - _td(minutes=SESSION_TIMEOUT_MINUTES)
+    try:
+        q = (db.session.query(User.username)
+             .join(UserSession, User.id==UserSession.user_id)
+             .filter(UserSession.last_seen >= cutoff)
+             .distinct())
+        return sorted([r[0] for r in q.all()])
+    except Exception:
+        return []
+
 @main.route('/set_project', methods=['POST'])
 @login_required
 def set_project():
@@ -202,11 +253,11 @@ def index():
     projects = Project.query.all()
     selected_project_id = session.get('selected_project_id')
     if selected_project_id:
-        phases = Phase.query.filter_by(project_id=selected_project_id).all()
+        phases = Phase.query.filter_by(project_id=selected_project_id).order_by(Phase.sort_order.asc(), Phase.id.asc()).all()
         items = Item.query.join(Phase).filter(Phase.project_id==selected_project_id).all()
         subitems = SubItem.query.join(Item).join(Phase).filter(Phase.project_id==selected_project_id).all()
     else:
-        phases = Phase.query.all()
+        phases = Phase.query.order_by(Phase.project_id.asc(), Phase.sort_order.asc(), Phase.id.asc()).all()
         items = Item.query.all()
         subitems = SubItem.query.all()
     # Build Gantt chart data in Python
@@ -258,6 +309,16 @@ def index():
             existing = t.get('custom_class','')
             t['custom_class'] = (existing + ' critical-path').strip()
     gantt_json_js = json.dumps(gantt_tasks)
+    # Draft (holding) parts
+    draft_parts = DraftPart.query.order_by(DraftPart.created_at.asc()).all()
+    draft_json_js = json.dumps([
+        {
+            'id': d.id,
+            'title': d.title,
+            'type': d.part_type,
+            'internal_external': d.internal_external
+        } for d in draft_parts
+    ])
 
     # Build calendar events in Python
     calendar_events = []
@@ -281,7 +342,146 @@ def index():
             })
     calendar_events_json = json.dumps(calendar_events)
     images = Image.query.all()
-    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js, calendar_events_json=calendar_events_json, critical_path_ids=critical_path_ids)
+    active_usernames = _get_active_usernames()
+    critical_filter_active = session.get('critical_filter') == 'on'
+    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js, draft_json_js=draft_json_js, calendar_events_json=calendar_events_json, critical_path_ids=critical_path_ids, active_usernames=active_usernames, critical_filter_active=critical_filter_active)
+
+@main.route('/create_draft_part', methods=['POST'])
+@login_required
+def create_draft_part():
+    title = request.form.get('draft-title')
+    part_type = request.form.get('draft-type')
+    internal_external = request.form.get('draft-internal-external') or 'internal'
+    if not title or not part_type:
+        return {'error':'Missing title or type'}, 400
+    draft = DraftPart(title=title, part_type=part_type, internal_external=internal_external)
+    db.session.add(draft); db.session.commit()
+    return {'status':'ok','draft':{'id':draft.id,'title':draft.title,'type':draft.part_type,'internal_external':draft.internal_external}}, 200
+
+@main.route('/promote_draft/<int:draft_id>', methods=['POST'])
+@login_required
+def promote_draft(draft_id):
+    draft = DraftPart.query.get_or_404(draft_id)
+    part_type = draft.part_type
+    project_id = request.form.get('project-id')
+    phase_id = request.form.get('phase-id')
+    item_id = request.form.get('item-id')
+    start = request.form.get('start-date')
+    duration = request.form.get('duration')
+    if not start or not duration:
+        return {'error':'Start and duration required to promote'}, 400
+    try:
+        start_obj = datetime.strptime(start, '%Y-%m-%d').date(); dur = int(duration)
+    except Exception:
+        return {'error':'Invalid date/duration'}, 400
+    created=None
+    parent_ids={}
+    if part_type=='phase':
+        if not project_id: return {'error':'Project required'}, 400
+        created = Phase(title=draft.title,start_date=start_obj,duration=dur,project_id=project_id,internal_external=draft.internal_external,is_milestone=False)
+        db.session.add(created)
+        parent_ids['project_id']=project_id
+    elif part_type=='item':
+        if not phase_id: return {'error':'Phase required'}, 400
+        created = Item(title=draft.title,start_date=start_obj,duration=dur,phase_id=phase_id,internal_external=draft.internal_external,is_milestone=False)
+        db.session.add(created); db.session.flush(); _enforce_dependencies_and_containment(created)
+        parent_ids['phase_id']=phase_id
+    elif part_type=='subitem':
+        if not item_id: return {'error':'Item required'}, 400
+        created = SubItem(title=draft.title,start_date=start_obj,duration=dur,item_id=item_id,internal_external=draft.internal_external,is_milestone=False)
+        db.session.add(created); db.session.flush(); _enforce_dependencies_and_containment(created)
+        parent_ids['item_id']=item_id
+    else:
+        return {'error':'Unknown type'}, 400
+    db.session.delete(draft); db.session.commit()
+    end = (start_obj + timedelta(days=dur)).strftime('%Y-%m-%d')
+    cid = ('phase-' if part_type=='phase' else 'item-' if part_type=='item' else 'subitem-') + str(created.id)
+    # Build hierarchy snippet similar to unified create handler
+    snippet=''
+    if part_type=='phase':
+        snippet=(f'<div style="margin:4px 0;" data-wrapper="phase-{created.id}">'
+                 f'<div class="node-line assoc-node" data-type="phase" data-id="{created.id}">'
+                 f'<span class="tree-toggle" onclick="toggleNode(this)">[–]</span>'
+                 f'<strong>Phase:</strong> {created.title} '
+                 f'<span class="meta">{created.start_date} / {created.duration}d</span>'
+                 f'<span class="actions"><button type="button" class="small" disabled>Edit</button></span>'
+                 '</div>'
+                 f'<div class="tree-children" data-phase-children="{created.id}"></div>'
+                 '</div>')
+    elif part_type=='item':
+        snippet=(f'<div style="margin:4px 0;" data-wrapper="item-{created.id}">'
+                 f'<div class="node-line assoc-node" data-type="item" data-id="{created.id}">'
+                 f'<span class="tree-toggle" onclick="toggleNode(this)">[–]</span>'
+                 f'<strong>Item:</strong> {created.title} '
+                 f'<span class="meta">{created.start_date} / {created.duration}d</span>'
+                 f'<span class="actions"><button type="button" class="small" disabled>Edit</button></span>'
+                 '</div>'
+                 f'<div class="tree-children" data-item-children="{created.id}"></div>'
+                 '</div>')
+    elif part_type=='subitem':
+        snippet=(f'<div style="margin:4px 0;" data-wrapper="subitem-{created.id}">'
+                 f'<div class="node-line assoc-node" data-type="subitem" data-id="{created.id}">'
+                 f'<strong>Sub:</strong> {created.title} '
+                 f'<span class="meta">{created.start_date} / {created.duration}d</span>'
+                 '</div>'
+                 '</div>')
+    return {'status':'ok','part_type':part_type,'task':{'id':cid,'name':('Phase: ' if part_type=='phase' else 'Item: ' if part_type=='item' else 'Sub: ')+draft.title,'start':start,'end':end,'duration':dur,'custom_class':('phase-bar' if part_type=='phase' else 'item-bar' if part_type=='item' else 'subitem-bar') + (' external-bar' if created.internal_external=='external' else '')},'hierarchy_snippet':snippet,'parent_ids':parent_ids}, 200
+
+@main.route('/reorder_phase', methods=['POST'])
+@login_required
+def reorder_phase():
+    data = request.get_json() or {}
+    phase_id = data.get('phase_id'); project_id = data.get('project_id'); new_position = data.get('new_position')
+    if phase_id is None or project_id is None or new_position is None:
+        return {'error':'missing fields'},400
+    phase = Phase.query.get_or_404(int(phase_id))
+    if str(phase.project_id)!=str(project_id):
+        # move phase to new project
+        phase.project_id = project_id
+    siblings = Phase.query.filter_by(project_id=project_id).order_by(Phase.sort_order.asc(), Phase.id.asc()).all()
+    # remove current phase from list (will reinsert)
+    siblings = [p for p in siblings if p.id!=phase.id]
+    new_position = max(0, min(len(siblings), int(new_position)))
+    siblings.insert(new_position, phase)
+    for idx, s in enumerate(siblings): s.sort_order = idx
+    db.session.commit()
+    return {'status':'ok'},200
+
+@main.route('/reorder_item', methods=['POST'])
+@login_required
+def reorder_item():
+    data = request.get_json() or {}
+    item_id = data.get('item_id'); phase_id = data.get('phase_id'); new_position = data.get('new_position')
+    if item_id is None or phase_id is None or new_position is None:
+        return {'error':'missing fields'},400
+    item = Item.query.get_or_404(int(item_id))
+    if str(item.phase_id)!=str(phase_id):
+        item.phase_id = phase_id
+    siblings = Item.query.filter_by(phase_id=phase_id).order_by(Item.sort_order.asc(), Item.id.asc()).all()
+    siblings = [i for i in siblings if i.id!=item.id]
+    new_position = max(0, min(len(siblings), int(new_position)))
+    siblings.insert(new_position, item)
+    for idx, s in enumerate(siblings): s.sort_order = idx
+    db.session.commit()
+    return {'status':'ok'},200
+
+@main.route('/reorder_subitem', methods=['POST'])
+@login_required
+def reorder_subitem():
+    data = request.get_json() or {}
+    sub_id = data.get('subitem_id'); item_id = data.get('item_id'); new_position = data.get('new_position')
+    if sub_id is None or item_id is None or new_position is None:
+        return {'error':'missing fields'},400
+    sub = SubItem.query.get_or_404(int(sub_id))
+    if str(sub.item_id)!=str(item_id):
+        sub.item_id = item_id
+    siblings = SubItem.query.filter_by(item_id=item_id).order_by(SubItem.sort_order.asc(), SubItem.id.asc()).all()
+    siblings = [s for s in siblings if s.id!=sub.id]
+    new_position = max(0, min(len(siblings), int(new_position)))
+    siblings.insert(new_position, sub)
+    for idx, s in enumerate(siblings): s.sort_order = idx
+    db.session.commit()
+    return {'status':'ok'},200
 
 @main.route('/export_calendar_ics')
 @login_required
@@ -330,6 +530,58 @@ def export_calendar_ics():
     ics_data = '\r\n'.join(lines)
     from flask import Response
     return Response(ics_data, mimetype='text/calendar', headers={'Content-Disposition':'attachment; filename="planning_export.ics"'})
+
+@main.route('/active_users')
+@login_required
+def active_users():
+    return {'users': _get_active_usernames()}
+
+@main.route('/set_critical_filter', methods=['POST'])
+@login_required
+def set_critical_filter():
+    state = request.json.get('state') if request.is_json else request.form.get('state')
+    if state in ('on','off'):
+        session['critical_filter'] = state
+        return {'status':'ok','state':state}
+    return {'error':'invalid state'}, 400
+
+@main.route('/export_critical_csv')
+@login_required
+def export_critical_csv():
+    # Build current tasks (phases + items + subitems) & compute critical again to ensure up-to-date
+    phases = Phase.query.all()
+    tasks = []
+    from datetime import datetime as _dt
+    for ph in phases:
+        p_start = str(ph.start_date)
+        p_end = (ph.start_date + timedelta(days=ph.duration)).strftime('%Y-%m-%d')
+        tasks.append({'id': f'phase-{ph.id}', 'start': p_start, 'end': p_end, 'dependencies': ''})
+        for it in ph.items:
+            i_start = str(it.start_date)
+            i_end = (it.start_date + timedelta(days=it.duration)).strftime('%Y-%m-%d')
+            tasks.append({'id': f'item-{it.id}', 'start': i_start, 'end': i_end, 'dependencies': it.dependencies or ''})
+    cp_ids = compute_critical_path(tasks)
+    # Map id -> object/type/title/dates
+    rows = []
+    order_map = {tid: idx+1 for idx, tid in enumerate(cp_ids)}
+    for tid in cp_ids:
+        if tid.startswith('phase-'):
+            obj = Phase.query.get(int(tid.split('-')[1]))
+            if obj:
+                rows.append(('Phase', order_map[tid], obj.title, obj.start_date, obj.duration))
+        elif tid.startswith('item-'):
+            obj = Item.query.get(int(tid.split('-')[1]))
+            if obj:
+                rows.append(('Item', order_map[tid], obj.title, obj.start_date, obj.duration))
+    import csv, io
+    sio = io.StringIO()
+    w = csv.writer(sio)
+    w.writerow(['Type','Order','Title','Start','Duration (days)'])
+    for r in rows:
+        w.writerow(r)
+    csv_bytes = io.BytesIO(sio.getvalue().encode('utf-8'))
+    csv_bytes.seek(0)
+    return send_file(csv_bytes, mimetype='text/csv', as_attachment=True, download_name='critical_path.csv')
 
 @main.route('/power_t_inline')
 def power_t_inline():
@@ -495,11 +747,11 @@ def create_item():
     notes = request.form.get('item-notes')
     if title and start_date and duration and phase_id:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
-    item = Item(title=title, start_date=start_date_obj, duration=int(duration), dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, phase_id=phase_id, notes=notes)
-    db.session.add(item)
-    db.session.flush()
-    _enforce_dependencies_and_containment(item)
-    db.session.commit()
+        item = Item(title=title, start_date=start_date_obj, duration=int(duration), dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, phase_id=phase_id, notes=notes)
+        db.session.add(item)
+        db.session.flush()
+        _enforce_dependencies_and_containment(item)
+        db.session.commit()
         flash('Item added!')
     return redirect(url_for('main.index'))
 
@@ -517,13 +769,171 @@ def create_subitem():
     notes = request.form.get('subitem-notes')
     if title and start_date and duration and item_id:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
-    subitem = SubItem(title=title, start_date=start_date_obj, duration=int(duration), dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, item_id=item_id, notes=notes)
-    db.session.add(subitem)
-    db.session.flush()
-    _enforce_dependencies_and_containment(subitem)
-    db.session.commit()
+        subitem = SubItem(title=title, start_date=start_date_obj, duration=int(duration), dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, item_id=item_id, notes=notes)
+        db.session.add(subitem)
+        db.session.flush()
+        _enforce_dependencies_and_containment(subitem)
+        db.session.commit()
         flash('Sub-Item added!')
     return redirect(url_for('main.index'))
+
+# Unified creation endpoint for phases, items, and subitems
+@main.route('/create_part', methods=['POST'])
+@login_required
+def create_part():
+    """Create a phase, item, or subitem from a single unified form.
+    Expected form fields:
+      part-type: phase|item|subitem
+      part-title, part-start (YYYY-MM-DD), part-duration (int)
+      part-milestone (optional checkbox), part-internal-external (internal|external)
+      part-dependencies (optional, items & subitems only)
+      project-id (for phase), phase-id (for item), item-id (for subitem)
+      part-notes (optional)
+    """
+    ptype = request.form.get('part-type')
+    title = request.form.get('part-title')
+    start_date = request.form.get('part-start')
+    duration = request.form.get('part-duration')
+    is_milestone = bool(request.form.get('part-milestone'))
+    internal_external = request.form.get('part-internal-external') or 'internal'
+    dependencies = (request.form.get('part-dependencies') or '').strip()
+    notes = request.form.get('part-notes')
+    if not (ptype and title and start_date and duration):
+        flash('Missing required fields.')
+        return redirect(url_for('main.index'))
+    try:
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        duration_val = int(duration)
+    except Exception:
+        flash('Invalid date or duration.')
+        return redirect(url_for('main.index'))
+    ajax = 'application/json' in (request.headers.get('Accept','').lower()) or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    created_obj = None
+    parent_ids = {}
+    try:
+        if ptype == 'phase':
+            project_id = request.form.get('project-id')
+            if not project_id:
+                if not ajax: flash('Project is required for a phase.')
+                return ( {'error':'Project required'}, 400 ) if ajax else redirect(url_for('main.index'))
+            created_obj = Phase(title=title, start_date=start_date_obj, duration=duration_val,
+                                is_milestone=is_milestone, internal_external=internal_external,
+                                project_id=project_id, notes=notes)
+            db.session.add(created_obj)
+            db.session.commit()
+            parent_ids['project_id'] = project_id
+            if not ajax: flash('Phase added!')
+        elif ptype == 'item':
+            phase_id = request.form.get('phase-id')
+            if not phase_id:
+                if not ajax: flash('Phase is required for an item.')
+                return ( {'error':'Phase required'}, 400 ) if ajax else redirect(url_for('main.index'))
+            created_obj = Item(title=title, start_date=start_date_obj, duration=duration_val,
+                               dependencies=dependencies, is_milestone=is_milestone,
+                               internal_external=internal_external, phase_id=phase_id, notes=notes)
+            db.session.add(created_obj); db.session.flush(); _enforce_dependencies_and_containment(created_obj); db.session.commit()
+            parent_ids['phase_id'] = phase_id
+            if not ajax: flash('Item added!')
+        elif ptype == 'subitem':
+            item_id = request.form.get('item-id')
+            if not item_id:
+                if not ajax: flash('Item is required for a sub-item.')
+                return ( {'error':'Item required'}, 400 ) if ajax else redirect(url_for('main.index'))
+            created_obj = SubItem(title=title, start_date=start_date_obj, duration=duration_val,
+                                  dependencies=dependencies, is_milestone=is_milestone,
+                                  internal_external=internal_external, item_id=item_id, notes=notes)
+            db.session.add(created_obj); db.session.flush(); _enforce_dependencies_and_containment(created_obj); db.session.commit()
+            parent_ids['item_id'] = item_id
+            if not ajax: flash('Sub-Item added!')
+        else:
+            if not ajax: flash('Unknown part type.')
+            return ( {'error':'Unknown part type'}, 400 ) if ajax else redirect(url_for('main.index'))
+    except Exception:
+        db.session.rollback()
+        if ajax:
+            return {'error':'Creation failed'}, 500
+        else:
+            flash('Error creating part.')
+            return redirect(url_for('main.index'))
+
+    if not ajax:
+        return redirect(url_for('main.index'))
+
+    # Build snippet HTML patterns matching existing structure (minimal)
+    snippet = ''
+    obj_id = None
+    if isinstance(created_obj, Phase):
+        obj_id = f'phase-{created_obj.id}'
+        snippet = (
+            f'<div style="margin:4px 0;" data-wrapper="phase-{created_obj.id}">'
+            f'<div class="node-line assoc-node" data-type="phase" data-id="{created_obj.id}">' \
+            f'<span class="tree-toggle" onclick="toggleNode(this)">[–]</span>' \
+            f'<strong>Phase:</strong> {created_obj.title} ' \
+            f'<span class="meta">{created_obj.start_date} / {created_obj.duration}d</span>' \
+            f'<span class="actions"><button type="button" class="small" disabled>Edit</button></span>' \
+            '</div>' \
+            f'<div class="tree-children" data-phase-children="{created_obj.id}"></div>' \
+            '</div>'
+        )
+    elif isinstance(created_obj, Item):
+        obj_id = f'item-{created_obj.id}'
+        snippet = (
+            f'<div style="margin:4px 0;" data-wrapper="item-{created_obj.id}">'
+            f'<div class="node-line assoc-node" data-type="item" data-id="{created_obj.id}">' \
+            f'<span class="tree-toggle" onclick="toggleNode(this)">[–]</span>' \
+            f'<strong>Item:</strong> {created_obj.title} ' \
+            f'<span class="meta">{created_obj.start_date} / {created_obj.duration}d</span>' \
+            f'<span class="actions"><button type="button" class="small" disabled>Edit</button></span>' \
+            '</div>' \
+            f'<div class="tree-children" data-item-children="{created_obj.id}"></div>' \
+            '</div>'
+        )
+    elif isinstance(created_obj, SubItem):
+        obj_id = f'subitem-{created_obj.id}'
+        snippet = (
+            f'<div style="margin:4px 0;" data-wrapper="subitem-{created_obj.id}">'
+            f'<div class="node-line assoc-node" data-type="subitem" data-id="{created_obj.id}">' \
+            f'<strong>Sub:</strong> {created_obj.title} ' \
+            f'<span class="meta">{created_obj.start_date} / {created_obj.duration}d</span>' \
+            '</div>' \
+            '</div>'
+        )
+
+    # Recompute critical path (phases + items)
+    phases_all = Phase.query.all()
+    tasks_for_cp = []
+    for ph in phases_all:
+        p_start = str(ph.start_date)
+        p_end = (ph.start_date + timedelta(days=ph.duration)).strftime('%Y-%m-%d')
+        tasks_for_cp.append({'id': f'phase-{ph.id}', 'start': p_start, 'end': p_end, 'dependencies': ''})
+        for it in ph.items:
+            i_start = str(it.start_date)
+            i_end = (it.start_date + timedelta(days=it.duration)).strftime('%Y-%m-%d')
+            tasks_for_cp.append({'id': f'item-{it.id}', 'start': i_start, 'end': i_end, 'dependencies': it.dependencies or ''})
+    cp_ids = compute_critical_path(tasks_for_cp)
+
+    # Build task object for front-end
+    start_final = str(created_obj.start_date)
+    end_final = (created_obj.start_date + timedelta(days=created_obj.duration)).strftime('%Y-%m-%d')
+    custom_class = ('phase-bar' if isinstance(created_obj, Phase) else 'item-bar' if isinstance(created_obj, Item) else 'subitem-bar')
+    if getattr(created_obj, 'internal_external', None) == 'external':
+        custom_class += ' external-bar'
+
+    return {
+        'status':'ok',
+        'part_type': ptype,
+        'task': {
+            'id': obj_id,
+            'name': ('Phase: ' if isinstance(created_obj, Phase) else 'Item: ' if isinstance(created_obj, Item) else 'Sub: ') + created_obj.title,
+            'start': start_final,
+            'end': end_final,
+            'duration': created_obj.duration,
+            'custom_class': custom_class
+        },
+        'hierarchy_snippet': snippet,
+        'parent_ids': parent_ids,
+        'critical_path': cp_ids
+    }, 200
 
 @main.route('/make_admin/<int:user_id>')
 @login_required
