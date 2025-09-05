@@ -231,15 +231,54 @@ def create_draft_part():
     title = request.form.get('draft-title','').strip()
     ptype = request.form.get('draft-type') or None
     internal_external = request.form.get('draft-internal-external','internal')
-    project_id = session.get('selected_project_id')
-    if not (title and project_id):
-        return {'error':'missing fields'}, 400
-    d = DraftPart(title=title, part_type=ptype, internal_external=internal_external, project_id=project_id)
+    # Optional extended fields
+    start_raw = request.form.get('draft-start')
+    duration_raw = request.form.get('draft-duration')
+    milestone_flag = bool(request.form.get('draft-milestone'))
+    dependencies = request.form.get('draft-dependencies') or None
+    notes = request.form.get('draft-notes') or None
+    # Allow drafts without project context; use optional explicit project override
+    project_id_form = request.form.get('draft-project-id')
+    try:
+        project_id = int(project_id_form) if project_id_form else session.get('selected_project_id')
+    except Exception:
+        project_id = session.get('selected_project_id')
+    if not title:
+        return {'error':'missing title'}, 400
+    start_date = None
+    if start_raw:
+        try:
+            from datetime import datetime
+            start_date = datetime.strptime(start_raw, '%Y-%m-%d').date()
+        except Exception:
+            start_date = None
+    try:
+        duration = int(duration_raw) if duration_raw else None
+    except ValueError:
+        duration = None
+    # Optional pre-assigned parents to guide promotion
+    phase_id = request.form.get('draft-phase-id'); feature_id = request.form.get('draft-feature-id')
+    try:
+        phase_id_val = int(phase_id) if phase_id else None
+    except ValueError:
+        phase_id_val = None
+    try:
+        feature_id_val = int(feature_id) if feature_id else None
+    except ValueError:
+        feature_id_val = None
+    d = DraftPart(title=title, part_type=ptype, internal_external=internal_external, project_id=project_id,
+                  start_date=start_date, duration=duration, is_milestone=milestone_flag,
+                  dependencies=dependencies, notes=notes, phase_id=phase_id_val, feature_id=feature_id_val)
     db.session.add(d)
     db.session.commit()
     return {'status':'ok','draft':{
         'id': d.id, 'title': d.title, 'type': d.part_type,
         'internal_external': d.internal_external, 'project_id': d.project_id,
+        'start': d.start_date.isoformat() if d.start_date else None,
+        'duration': d.duration,
+        'milestone': bool(d.is_milestone),
+        'dependencies': d.dependencies,
+        'notes': d.notes,
         'needs_type': d.part_type is None
     }}
 
@@ -280,22 +319,28 @@ def promote_draft_auto():
     data = request.get_json() or {}
     draft_id = data.get('draft_id'); inferred = data.get('inferred_type')
     start_raw = data.get('start'); duration = data.get('duration') or 1
-    if not (draft_id and inferred and start_raw):
+    if not (draft_id and inferred):
         return {'error':'missing fields'}, 400
     draft = DraftPart.query.get_or_404(int(draft_id))
     if draft.part_type and draft.part_type != inferred:
         return {'error':'draft type conflict'}, 400
     if not draft.part_type:
         draft.part_type = inferred
-    try:
-        start_date = datetime.strptime(start_raw, '%Y-%m-%d').date()
-    except Exception:
-        return {'error':'invalid start'}, 400
+    # Prefer provided start; else use draft.start_date if available
+    if start_raw:
+        try:
+            start_date = datetime.strptime(start_raw, '%Y-%m-%d').date()
+        except Exception:
+            return {'error':'invalid start'}, 400
+    else:
+        start_date = draft.start_date or date.today()
     try:
         duration = int(duration)
     except ValueError:
         duration = 1
     if duration < 1: duration = 1
+    if not data.get('duration') and draft.duration and isinstance(draft.duration, int):
+        duration = max(1, draft.duration)
     created = None
     project_id = draft.project_id or session.get('selected_project_id')
     if inferred == 'phase':
@@ -304,14 +349,14 @@ def promote_draft_auto():
         created = Phase(title=draft.title, start_date=start_date, duration=duration,
                          project_id=project_id, internal_external=draft.internal_external)
     elif inferred == 'feature':
-        phase_id = data.get('phase_id')
+        phase_id = data.get('phase_id') or draft.phase_id
         if not phase_id:
             return {'error':'phase_id required'}, 400
         created = Feature(title=draft.title, start_date=start_date, duration=duration,
                           phase_id=int(phase_id), internal_external=draft.internal_external)
     elif inferred == 'item':
-        feature_id = data.get('feature_id')
-        item_id = data.get('item_id')
+        feature_id = data.get('feature_id') or draft.feature_id
+        item_id = data.get('item_id') or draft.item_id
         resolved_feature_id = None
         if feature_id:
             try:

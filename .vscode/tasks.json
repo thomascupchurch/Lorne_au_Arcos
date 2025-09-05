@@ -1,0 +1,65 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Setup: Upgrade DB",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\manage.ps1",
+        "-Upgrade"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Run: Dev Server",
+      "type": "shell",
+      "isBackground": true,
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\manage.ps1",
+        "-Run",
+        "-BindHost", "127.0.0.1",
+        "-Port", "5000"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Verify: Schema",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\manage.ps1",
+        "-Verify"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Test: Pytest",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m", "pytest", "-q"
+      ],
+  "problemMatcher": []
+    },
+    {
+      "label": "Compile: Python",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m", "compileall", "app"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

@@ -94,6 +94,10 @@ class DraftPart(db.Model):
     # part_type now optional while in holding area (phase|item|subitem once assigned)
     part_type = db.Column(db.String(20), nullable=True)
     internal_external = db.Column(db.String(20), default='internal')
+    # Optional scheduling fields to preconfigure before promotion
+    start_date = db.Column(db.Date, nullable=True)
+    duration = db.Column(db.Integer, nullable=True)
+    is_milestone = db.Column(db.Boolean, default=False)
     dependencies = db.Column(db.String(256))
     notes = db.Column(db.Text)
     # Optional pre-assignment references (may be null until promotion)

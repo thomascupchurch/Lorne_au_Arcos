@@ -46,6 +46,23 @@ Pytest suite (seed user) covers media association lifecycle and part creation / 
 pytest -q
 ```
 
+## VS Code
+- Tasks: Ctrl+Shift+P → Run Task →
+	- Setup: Upgrade DB (alembic upgrade head)
+	- Run: Dev Server (starts http://127.0.0.1:5000)
+	- Test: Pytest
+	- Compile: Python (syntax check)
+- Launch: F5 → "Python: Run Flask (run.py)". Compound "Upgrade DB + Run" upgrades then launches.
+
+Recommended extensions are preconfigured in `.vscode/extensions.json`.
+
+## Architecture
+- Flask app factory in `app/__init__.py`
+- Blueprints in `app/blueprints/`: auth, admin, utility, planning, media
+- Models and Alembic migrations provide persistence; avoid ad-hoc schema changes
+- Static assets in `static/`, templates in `app/templates/`
+- Scripts for Windows/Unix in `scripts/`
+
 ## Implementation Notes
 - Critical path: simplified longest-duration path across dependencies (features/items). No cycle detection yet.
 - Drag cascade: adjusts dependent starts to follow latest predecessor end.

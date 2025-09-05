@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Run Flask (run.py)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "console": "integratedTerminal",
+      "env": {
+        "FLASK_ENV": "development"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Upgrade DB + Run",
+      "preLaunchTask": "Setup: Upgrade DB",
+      "configurations": ["Python: Run Flask (run.py)"]
+    }
+  ]
+}

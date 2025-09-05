@@ -268,15 +268,15 @@
                 </form>
             </div>
                         <h2>Planning Section</h2>
-                        <h3 style="margin-top:1.5em;">Project Part Creation</h3>
+                        <h3 style="margin-top:1.5em;">Drafts / Holding Area</h3>
                         <section id="holding-area" style="margin:10px 0 24px 0; border:1px solid #FF8200; padding:10px 12px; border-radius:10px; background:rgba(255,130,0,0.08);">
                             <h4 style="margin:0 0 8px 0;color:#FF8200;font-size:0.95em;display:flex;align-items:center;gap:8px;">Holding Area (Draft Parts) <span style="font-weight:400;font-size:0.8em;opacity:.8;">Title-only drafts appear here as orange chips until promoted.</span></h4>
                             <form id="draft-create-form" style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;">
-                                <div style="flex:3 1 220px;min-width:180px;">
+                                <div style="flex:2 1 240px;min-width:200px;">
                                     <label style="display:block;font-size:0.65em;opacity:.75;">Title *</label>
                                     <input type="text" name="draft-title" placeholder="Draft Title" required style="width:100%;">
                                 </div>
-                                <div style="flex:1 1 130px;min-width:110px;">
+                                <div style="flex:1 1 130px;min-width:120px;">
                                     <label style="display:block;font-size:0.65em;opacity:.75;">Type (optional)</label>
                                     <select name="draft-type" style="width:100%;">
                                         <option value="">(none)</option>
@@ -285,12 +285,49 @@
                                         <option value="item">Item</option>
                                     </select>
                                 </div>
-                                <div style="flex:1 1 130px;min-width:110px;">
+                                <div style="flex:1 1 140px;min-width:120px;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Start (opt)</label>
+                                    <input type="date" name="draft-start" style="width:100%;">
+                                </div>
+                                <div style="flex:0 0 110px;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Duration (d, opt)</label>
+                                    <input type="number" name="draft-duration" min="1" style="width:100%;">
+                                </div>
+                                <div style="flex:0 0 100px;display:flex;align-items:center;gap:6px;margin-top:18px;">
+                                    <label style="font-size:0.7em;opacity:.8;display:flex;align-items:center;gap:4px;">Milestone <input type="checkbox" name="draft-milestone"></label>
+                                </div>
+                                <div style="flex:1 1 130px;min-width:120px;">
                                     <label style="display:block;font-size:0.65em;opacity:.75;">Int/Ext</label>
                                     <select name="draft-internal-external" style="width:100%;">
                                         <option value="internal">Internal</option>
                                         <option value="external">External</option>
                                     </select>
+                                </div>
+                                <div style="flex:2 1 220px;min-width:200px;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Dependencies (IDs, opt)</label>
+                                    <input type="text" name="draft-dependencies" placeholder="e.g. feature-3, item-5" style="width:100%;">
+                                </div>
+                                <div id="draft-phase-select-wrapper" style="flex:1 1 180px;min-width:160px;display:none;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Phase (for Feature)</label>
+                                    <select name="draft-phase-id" id="draft-phase-id" style="width:100%;">
+                                        <option value="">Phase</option>
+                                        {% for phase in phases %}
+                                        <option value="{{ phase.id }}">{{ phase.title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div id="draft-feature-select-wrapper" style="flex:1 1 180px;min-width:160px;display:none;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Feature (for Item)</label>
+                                    <select name="draft-feature-id" id="draft-feature-id" style="width:100%;">
+                                        <option value="">Feature</option>
+                                        {% for feature in features %}
+                                        <option value="{{ feature.id }}">{{ feature.title }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div style="flex:3 1 280px;min-width:240px;">
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Notes (opt)</label>
+                                    <textarea name="draft-notes" style="width:100%;min-height:44px;resize:vertical;"></textarea>
                                 </div>
                                 <div style="flex:0 0 auto;">
                                     <button type="submit" style="background:#FF8200;color:#fff;border:none;padding:0.55em 1em;border-radius:8px;font-weight:600;cursor:pointer;">Add Draft</button>
@@ -392,79 +429,7 @@
                     </div>
                 </div>
             </div>
-            <div id="planning-ui" style="background:rgba(255,255,255,0.03);border-radius:16px;padding:1em;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:1em;">
-                <form id="unified-part-form" action="/create_part" method="post" style="display:flex;flex-wrap:wrap;gap:0.75em;align-items:flex-end;">
-                    <div style="flex:1 1 160px;min-width:160px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Type</label>
-                        <select name="part-type" id="part-type" required style="width:100%;">
-                            <option value="phase">Phase</option>
-                            <option value="feature">Feature</option>
-                            <option value="item">Item</option>
-                        </select>
-                    </div>
-                    <div style="flex:2 1 220px;min-width:200px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Title</label>
-                        <input type="text" name="part-title" placeholder="Title" required style="width:100%;">
-                    </div>
-                    <div style="flex:1 1 140px;min-width:120px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Start</label>
-                        <input type="date" name="part-start" required style="width:100%;">
-                    </div>
-                    <div style="flex:0 0 110px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Duration (d)</label>
-                        <input type="number" name="part-duration" placeholder="Days" min="1" required style="width:100%;">
-                    </div>
-                    <div style="flex:0 0 120px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Internal/Ext</label>
-                        <select name="part-internal-external" style="width:100%;">
-                            <option value="internal">Internal</option>
-                            <option value="external">External</option>
-                        </select>
-                    </div>
-                    <div id="project-select-wrapper" style="flex:1 1 160px;min-width:150px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Project (for Phase)</label>
-                        <select name="project-id" id="unified-project-id" style="width:100%;">
-                            <option value="">Project</option>
-                            {% for project in projects %}
-                            <option value="{{ project.id }}" {% if selected_project_id and project.id|string == selected_project_id|string %}selected{% endif %}>{{ project.title }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div id="phase-select-wrapper" style="flex:1 1 160px;min-width:150px;display:none;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Phase (for Feature)</label>
-                        <select name="phase-id" id="unified-phase-id" style="width:100%;">
-                            <option value="">Phase</option>
-                            {% for phase in phases %}
-                            <option value="{{ phase.id }}">{{ phase.title }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div id="feature-select-wrapper" style="flex:1 1 160px;min-width:150px;display:none;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Feature (for Item)</label>
-                        <select name="feature-id" id="unified-feature-id" style="width:100%;">
-                            <option value="">Feature</option>
-                            {% for feature in features %}
-                            <option value="{{ feature.id }}">{{ feature.title }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div style="flex:1 1 200px;min-width:180px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Dependencies (IDs)</label>
-                        <input type="text" name="part-dependencies" placeholder="e.g. feature-3, item-5" style="width:100%;">
-                    </div>
-                    <div style="flex:0 0 90px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Milestone</label>
-                        <input type="checkbox" name="part-milestone" style="transform:scale(1.2);margin-top:6px;">
-                    </div>
-                    <div style="flex:1 1 280px;min-width:240px;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Notes</label>
-                        <textarea name="part-notes" style="width:100%;min-height:44px;resize:vertical;"></textarea>
-                    </div>
-                    <div style="flex:0 0 120px;display:flex;gap:6px;">
-                        <button type="submit" style="background:#FF8200;color:#fff;border:none;padding:0.6em 1em;border-radius:8px;font-weight:600;cursor:pointer;">Add</button>
-                        <button type="reset" style="background:#555;color:#fff;border:none;padding:0.6em 1em;border-radius:8px;cursor:pointer;">Reset</button>
-                    </div>
-                </form>
+            <div id="planning-ui" style="display:none;"></div>
                                 <script>
                                                 // Draft holding area script
                                                 const draftData = (function(){
@@ -493,7 +458,34 @@
                                 }
                                 document.addEventListener('DOMContentLoaded', renderDrafts);
                                 const draftForm=document.getElementById('draft-create-form');
-                                if(draftForm){ draftForm.addEventListener('submit', function(e){ e.preventDefault(); const projSel=document.getElementById('project-select'); if(!projSel || !projSel.value){ alert('Select a project first.'); return; } const fd=new FormData(draftForm); fetch('/create_draft_part',{method:'POST',body:fd}).then(r=>r.json()).then(resp=>{ if(resp.status==='ok'){ draftData.push(resp.draft); renderDrafts(); draftForm.reset(); } else { alert(resp.error||'Draft create failed'); } }); }); }
+                                if(draftForm){
+                                    // Show/hide parent selectors based on chosen type
+                                    const typeSel = draftForm.querySelector('select[name="draft-type"]');
+                                    const phaseWrap = document.getElementById('draft-phase-select-wrapper');
+                                    const featureWrap = document.getElementById('draft-feature-select-wrapper');
+                                    function updateDraftParentVisibility(){
+                                        const v = typeSel ? typeSel.value : '';
+                                        phaseWrap.style.display = (v==='feature') ? 'block' : 'none';
+                                        featureWrap.style.display = (v==='item') ? 'block' : 'none';
+                                    }
+                                    if(typeSel){ typeSel.addEventListener('change', updateDraftParentVisibility); updateDraftParentVisibility(); }
+                                    draftForm.addEventListener('submit', function(e){
+                                    e.preventDefault();
+                                    const projSel=document.getElementById('project-select');
+                                    if(!projSel || !projSel.value){ alert('Select a project first.'); return; }
+                                    const fd=new FormData(draftForm);
+                                    fetch('/create_draft_part',{method:'POST',body:fd})
+                                        .then(r=>r.json())
+                                        .then(resp=>{
+                                            if(resp.status==='ok'){
+                                                draftData.push(resp.draft);
+                                                renderDrafts();
+                                                draftForm.reset();
+                                                    updateDraftParentVisibility();
+                                            } else { alert(resp.error||'Draft create failed'); }
+                                        });
+                                    });
+                                }
                                 // Drag-drop promotion over Gantt
                                 (function(){
                                     const ganttEl = document.getElementById('gantt-chart');
@@ -719,139 +711,31 @@
                                                             } else { alert(resp.error||'Promotion failed'); }
                                                         });
                                 }
+                // Dependency picker for draft dependencies input
                 (function(){
-                    const typeSel = document.getElementById('part-type');
-                    const projWrap = document.getElementById('project-select-wrapper');
-                    const phaseWrap = document.getElementById('phase-select-wrapper');
-                    const featureWrap = document.getElementById('feature-select-wrapper');
-                    const form = document.getElementById('unified-part-form');
-                    const depInput = form.querySelector('input[name="part-dependencies"]');
-                    // Sync selected project from global project selector if present
-                    const globalProj = document.getElementById('project-select');
-                    const unifiedProj = document.getElementById('unified-project-id');
-                    if(globalProj && unifiedProj && globalProj.value && !unifiedProj.value){ unifiedProj.value = globalProj.value; }
-                    if(globalProj && unifiedProj){
-                        globalProj.addEventListener('change', ()=>{
-                            if(globalProj.value){ unifiedProj.value = globalProj.value; }
-                        });
-                    }
-                    // Simple dependency suggestions store
+                    const form = document.getElementById('draft-create-form'); if(!form) return;
+                    const depInput = form.querySelector('input[name="draft-dependencies"]'); if(!depInput) return;
                     window._dependencyIds = window._dependencyIds || [];
-                    function updateVisibility(){
-                        const v = typeSel.value;
-                        projWrap.style.display = (v==='phase') ? 'block':'none';
-                        phaseWrap.style.display = (v==='feature') ? 'block':'none';
-                        featureWrap.style.display = (v==='item') ? 'block':'none';
-                    }
-                    typeSel.addEventListener('change', updateVisibility);
-                    updateVisibility();
-
                     function refreshDependencyPool(){
-                        // collect ids from current gantt tasks
-                        try {
-                            const tasks = window._ganttTasks || [];
-                            window._dependencyIds = tasks.map(t=> t.id);
-                        } catch(e){}
+                        try { window._dependencyIds = (window._ganttTasks||[]).map(t=> t.id); } catch(e){}
                     }
                     refreshDependencyPool();
-
-                    // Basic autocomplete dropdown
                     const dropdown = document.createElement('div');
-                    dropdown.style.position='absolute';
-                    dropdown.style.background='#222';
-                    dropdown.style.border='1px solid #555';
-                    dropdown.style.zIndex='3000';
-                    dropdown.style.display='none';
-                    dropdown.style.maxHeight='160px';
-                    dropdown.style.overflowY='auto';
-                    dropdown.style.fontSize='12px';
-                    dropdown.style.minWidth='200px';
+                    dropdown.style.position='absolute'; dropdown.style.background='#222'; dropdown.style.border='1px solid #555'; dropdown.style.zIndex='3000'; dropdown.style.display='none'; dropdown.style.maxHeight='160px'; dropdown.style.overflowY='auto'; dropdown.style.fontSize='12px'; dropdown.style.minWidth='200px';
                     document.body.appendChild(dropdown);
                     function showDropdown(matches, anchor){
                         if(!matches.length){ dropdown.style.display='none'; return; }
                         dropdown.innerHTML='';
                         matches.slice(0,25).forEach(m=>{
-                            const opt=document.createElement('div');
-                            opt.textContent=m; opt.style.padding='4px 6px'; opt.style.cursor='pointer';
-                            opt.onmouseover=()=> opt.style.background='#333';
-                            opt.onmouseout=()=> opt.style.background='transparent';
-                            opt.onclick=()=>{
-                                const existing = depInput.value.trim();
-                                if(existing){ depInput.value = existing.replace(/[,;]\s*$/,'') + ', ' + m; }
-                                else { depInput.value = m; }
-                                dropdown.style.display='none'; depInput.focus();
-                            };
+                            const opt=document.createElement('div'); opt.textContent=m; opt.style.padding='4px 6px'; opt.style.cursor='pointer';
+                            opt.onmouseover=()=> opt.style.background='#333'; opt.onmouseout=()=> opt.style.background='transparent';
+                            opt.onclick=()=>{ const existing = depInput.value.trim(); depInput.value = existing? existing.replace(/[,;]\s*$/,'') + ', ' + m : m; dropdown.style.display='none'; depInput.focus(); };
                             dropdown.appendChild(opt);
                         });
-                        const rect = anchor.getBoundingClientRect();
-                        dropdown.style.left = rect.left + window.scrollX + 'px';
-                        dropdown.style.top = (rect.bottom + window.scrollY) + 'px';
-                        dropdown.style.display='block';
+                        const rect = anchor.getBoundingClientRect(); dropdown.style.left = rect.left + window.scrollX + 'px'; dropdown.style.top = (rect.bottom + window.scrollY) + 'px'; dropdown.style.display='block';
                     }
-                    depInput.addEventListener('input', function(){
-                        const val = this.value.split(/[,;]/).pop().trim().toLowerCase();
-                        if(!val){ dropdown.style.display='none'; return; }
-                        const matches = (window._dependencyIds||[]).filter(id=> id.toLowerCase().includes(val));
-                        showDropdown(matches, this);
-                    });
+                    depInput.addEventListener('input', function(){ const val = this.value.split(/[,;]/).pop().trim().toLowerCase(); if(!val){ dropdown.style.display='none'; return; } const matches=(window._dependencyIds||[]).filter(id=> id.toLowerCase().includes(val)); showDropdown(matches, this); });
                     document.addEventListener('click', (e)=>{ if(!dropdown.contains(e.target) && e.target!==depInput) dropdown.style.display='none'; });
-
-                    form.addEventListener('submit', function(ev){
-                        ev.preventDefault();
-                        const fd = new FormData(form);
-                        fetch('/create_part', { method:'POST', body: fd, headers:{'Accept':'application/json','X-Requested-With':'XMLHttpRequest'} })
-                        .then(r=> r.json().then(j=>({ok:r.ok,data:j})))
-                        .then(resp=>{
-                            if(!resp.ok){ alert(resp.data && resp.data.error ? resp.data.error : 'Create failed'); return; }
-                            const t = resp.data.task;
-                            if(!t){ return; }
-                            // Update internal tasks list
-                            if(!Array.isArray(window._ganttTasks)) window._ganttTasks=[];
-                            window._ganttTasks.push(t);
-                            // Re-render gantt quickly
-                            const gc=document.getElementById('gantt-chart'); if(gc) gc.innerHTML='';
-                            window._ganttInstance = new Gantt('#gantt-chart', window._ganttTasks, { view_mode:'Day', bar_height:24, custom_popup_html:null, on_click:window._ganttClickHandler, on_date_change:window._ganttDateChangeHandler });
-                            applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0);
-                            // Update critical path display
-                            if(resp.data.critical_path){
-                                document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
-                                resp.data.critical_path.forEach(id=>{ const bar=document.querySelector(`.gantt .bar[data-id="${id}"]`); if(bar) bar.classList.add('critical-path'); });
-                                const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=resp.data.critical_path.join(' → ');
-                            }
-                            // Insert hierarchy snippet
-                            if(resp.data.hierarchy_snippet){
-                                if(resp.data.part_type==='phase'){
-                                    // append to each matching project block if project id matches
-                                    const projId = resp.data.parent_ids && resp.data.parent_ids.project_id;
-                                    if(projId){
-                                        const projBlock = document.querySelector(`.project-block .assoc-node[data-type="project"][data-id="${projId}"]`);
-                                        if(projBlock){
-                                            let childContainer = projBlock.parentElement.querySelector(':scope > .tree-children');
-                                            if(childContainer){ childContainer.insertAdjacentHTML('beforeend', resp.data.hierarchy_snippet); }
-                                        }
-                                    }
-                                } else if(resp.data.part_type==='item') {
-                                    const phaseChildren = document.querySelector(`div.tree-children [data-type="phase"][data-id="${resp.data.parent_ids.phase_id}"]`);
-                                    if(phaseChildren){
-                                        // Need its sibling tree-children after phase node line
-                                        const wrapper = phaseChildren.parentElement; // node-line container
-                                        const tc = wrapper.nextElementSibling; // children container
-                                        if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', resp.data.hierarchy_snippet);
-                                    }
-                                }
-                            }
-                            // Update dependency pool and calendar
-                            refreshDependencyPool();
-                            if(window._calendarInstance){
-                                try {
-                                    const calEnd = new Date(t.end + 'T00:00:00Z'); calEnd.setDate(calEnd.getDate()+1);
-                                    window._calendarInstance.addEvent({ id:t.id, title:t.name, start:t.start, end:calEnd.toISOString().slice(0,10), color: /external-bar/.test(t.custom_class)? '#4B4B4B':'#FF8200' });
-                                } catch(e){}
-                            }
-                            form.reset();
-                            typeSel.value='phase'; updateVisibility();
-                        }).catch(()=> alert('Network error creating part'));
-                    });
                 })();
                 </script>
                 <div id="planning-hierarchy">
