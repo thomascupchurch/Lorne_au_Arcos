@@ -316,7 +316,8 @@ def index():
             'id': d.id,
             'title': d.title,
             'type': d.part_type,
-            'internal_external': d.internal_external
+            'internal_external': d.internal_external,
+            'project_id': d.project_id
         } for d in draft_parts
     ])
 
@@ -354,9 +355,14 @@ def create_draft_part():
     internal_external = request.form.get('draft-internal-external') or 'internal'
     if not title or not part_type:
         return {'error':'Missing title or type'}, 400
-    draft = DraftPart(title=title, part_type=part_type, internal_external=internal_external)
+    # Enforce project selection context
+    selected_project_id = session.get('selected_project_id')
+    if not selected_project_id:
+        return {'error':'Select a project first'}, 400
+    # For phase drafts we attach project_id now; for item/subitem we still record project for context
+    draft = DraftPart(title=title, part_type=part_type, internal_external=internal_external, project_id=selected_project_id)
     db.session.add(draft); db.session.commit()
-    return {'status':'ok','draft':{'id':draft.id,'title':draft.title,'type':draft.part_type,'internal_external':draft.internal_external}}, 200
+    return {'status':'ok','draft':{'id':draft.id,'title':draft.title,'type':draft.part_type,'internal_external':draft.internal_external,'project_id':draft.project_id}}, 200
 
 @main.route('/promote_draft/<int:draft_id>', methods=['POST'])
 @login_required
@@ -660,31 +666,69 @@ def upload_file():
     if 'file' not in request.files:
         flash('No file part')
         return redirect(url_for('main.index'))
-    file = request.files['file']
-    association_type = request.form.get('association-type')
-    association_id = request.form.get('association-id')
-    if file.filename == '' or not association_type or not association_id:
-        flash('Missing file or association info')
+    files = request.files.getlist('file')
+    if not files:
+        flash('No files selected')
         return redirect(url_for('main.index'))
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        if not os.path.exists(UPLOAD_FOLDER):
-            os.makedirs(UPLOAD_FOLDER)
-        file.save(os.path.join(UPLOAD_FOLDER, filename))
-        # Parse association
-        phase_id = item_id = subitem_id = None
-        if association_type == 'phase' and association_id.startswith('phase-'):
-            phase_id = int(association_id.split('-')[1])
-        elif association_type == 'item' and association_id.startswith('item-'):
-            item_id = int(association_id.split('-')[1])
-        elif association_type == 'subitem' and association_id.startswith('subitem-'):
-            subitem_id = int(association_id.split('-')[1])
-        # Save image association
-        img = Image(filename=filename, phase_id=phase_id, item_id=item_id, subitem_id=subitem_id)
-        db.session.add(img)
+    association_type = request.form.get('association-type')  # deprecated (single-link); retained for backward compatibility but ignored
+    association_id = request.form.get('association-id')
+    uploaded = 0
+    for file in files:
+        if not file or file.filename == '':
+            continue
+        if allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            if not os.path.exists(UPLOAD_FOLDER):
+                os.makedirs(UPLOAD_FOLDER)
+            file.save(os.path.join(UPLOAD_FOLDER, filename))
+            project_id = session.get('selected_project_id')
+            # Initial creation without part links; use /associate_image or batch endpoint afterwards
+            img = Image(filename=filename, project_id=project_id)
+            db.session.add(img)
+            uploaded += 1
+    if uploaded:
         db.session.commit()
-        flash('File uploaded and associated successfully')
+        flash(f'Uploaded {uploaded} file(s)')
+    else:
+        flash('No valid files uploaded')
     return redirect(url_for('main.index'))
+
+@main.route('/associate_image', methods=['POST'])
+@login_required
+def associate_image():
+    data = request.get_json() or {}
+    image_id = data.get('image_id')
+    target_type = data.get('target_type')
+    target_id = data.get('target_id')
+    if not all([image_id, target_type, target_id]):
+        return {'error':'missing fields'}, 400
+    img = Image.query.get(image_id)
+    if not img:
+        return {'error':'not found'}, 404
+    try:
+        added = False
+        if target_type=='phase':
+            ph = Phase.query.get(int(target_id))
+            if not ph: return {'error':'phase not found'},404
+            if ph not in img.phases:
+                img.phases.append(ph); added=True
+        elif target_type=='item':
+            it = Item.query.get(int(target_id))
+            if not it: return {'error':'item not found'},404
+            if it not in img.items:
+                img.items.append(it); added=True
+        elif target_type=='subitem':
+            si = SubItem.query.get(int(target_id))
+            if not si: return {'error':'subitem not found'},404
+            if si not in img.subitems:
+                img.subitems.append(si); added=True
+        else:
+            return {'error':'bad target_type'},400
+        db.session.commit()
+        return {'status':'ok','image_id':img.id,'target_type':target_type,'target_id':target_id,'added':added}
+    except Exception:
+        db.session.rollback()
+        return {'error':'associate failed'}, 500
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -1305,6 +1349,137 @@ def delete_image(image_id):
     db.session.commit()
     return redirect(request.referrer or url_for('main.index'))
 
+@main.route('/unlink_image', methods=['POST'])
+@login_required
+def unlink_image():
+    data = request.get_json() or {}
+    image_id = data.get('image_id')
+    context_type = data.get('context_type')  # phase|item|subitem
+    context_id = data.get('context_id')
+    if not image_id:
+        return {'error':'image_id required'}, 400
+    img = Image.query.get(image_id)
+    if not img:
+        return {'error':'not found'}, 404
+    # Only clear the association that matches the provided context (if supplied)
+    changed = False
+    try:
+        if context_type == 'phase' and context_id:
+            ph = Phase.query.get(int(context_id))
+            if ph and ph in img.phases:
+                img.phases.remove(ph); changed=True
+        elif context_type == 'item' and context_id:
+            it = Item.query.get(int(context_id))
+            if it and it in img.items:
+                img.items.remove(it); changed=True
+        elif context_type == 'subitem' and context_id:
+            si = SubItem.query.get(int(context_id))
+            if si and si in img.subitems:
+                img.subitems.remove(si); changed=True
+        elif not context_type:  # fallback: clear all links
+            if img.phases or img.items or img.subitems:
+                img.phases.clear(); img.items.clear(); img.subitems.clear(); changed=True
+        if changed:
+            db.session.commit()
+        return {'status':'ok','image_id':img.id,'cleared':changed}
+    except Exception:
+        db.session.rollback()
+        return {'error':'unlink failed'}, 500
+
+@main.route('/image_links/<int:image_id>')
+@login_required
+def image_links(image_id):
+    img = Image.query.get_or_404(image_id)
+    def simple_phase(p): return {'id':p.id,'title':p.title,'type':'phase'}
+    def simple_item(i): return {'id':i.id,'title':i.title,'type':'item'}
+    def simple_sub(s): return {'id':s.id,'title':s.title,'type':'subitem'}
+    data = {
+        'image_id': img.id,
+        'filename': img.filename,
+        'project_id': img.project_id,
+        'phases': [simple_phase(p) for p in img.phases],
+        'items': [simple_item(i) for i in img.items],
+        'subitems': [simple_sub(s) for s in img.subitems]
+    }
+    return data
+
+@main.route('/batch_associate_images', methods=['POST'])
+@login_required
+def batch_associate_images():
+    data = request.get_json() or {}
+    links = data.get('links')  # list of {image_id, target_type, target_id}
+    if not isinstance(links, list):
+        return {'error':'links list required'}, 400
+    results=[]; errors=0
+    for link in links:
+        iid = link.get('image_id'); ttype=link.get('target_type'); tid=link.get('target_id')
+        if not all([iid,ttype,tid]):
+            results.append({'image_id':iid,'status':'skipped','reason':'missing field'}); errors+=1; continue
+        img = Image.query.get(iid)
+        if not img:
+            results.append({'image_id':iid,'status':'skipped','reason':'image not found'}); errors+=1; continue
+        try:
+            added=False
+            if ttype=='phase':
+                ph=Phase.query.get(int(tid));
+                if ph and ph not in img.phases: img.phases.append(ph); added=True
+            elif ttype=='item':
+                it=Item.query.get(int(tid));
+                if it and it not in img.items: img.items.append(it); added=True
+            elif ttype=='subitem':
+                si=SubItem.query.get(int(tid));
+                if si and si not in img.subitems: img.subitems.append(si); added=True
+            else:
+                results.append({'image_id':iid,'status':'skipped','reason':'bad target_type'}); errors+=1; continue
+            results.append({'image_id':iid,'status':'ok','added':added})
+        except Exception as e:
+            results.append({'image_id':iid,'status':'error','reason':str(e)}); errors+=1
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback(); return {'error':'commit failed','results':results}, 500
+    return {'results':results,'errors':errors}
+
+@main.route('/batch_unassociate_images', methods=['POST'])
+@login_required
+def batch_unassociate_images():
+    data = request.get_json() or {}
+    links = data.get('links')  # list of {image_id, context_type, context_id}
+    if not isinstance(links, list):
+        return {'error':'links list required'}, 400
+    results=[]; errors=0
+    for link in links:
+        iid=link.get('image_id'); ctype=link.get('context_type'); cid=link.get('context_id')
+        if not iid:
+            results.append({'image_id':iid,'status':'skipped','reason':'missing image_id'}); errors+=1; continue
+        img=Image.query.get(iid)
+        if not img:
+            results.append({'image_id':iid,'status':'skipped','reason':'image not found'}); errors+=1; continue
+        try:
+            changed=False
+            if ctype=='phase' and cid:
+                ph=Phase.query.get(int(cid));
+                if ph and ph in img.phases: img.phases.remove(ph); changed=True
+            elif ctype=='item' and cid:
+                it=Item.query.get(int(cid));
+                if it and it in img.items: img.items.remove(it); changed=True
+            elif ctype=='subitem' and cid:
+                si=SubItem.query.get(int(cid));
+                if si and si in img.subitems: img.subitems.remove(si); changed=True
+            elif not ctype: # clear all
+                if img.phases or img.items or img.subitems:
+                    img.phases.clear(); img.items.clear(); img.subitems.clear(); changed=True
+            else:
+                results.append({'image_id':iid,'status':'skipped','reason':'bad context_type'}); errors+=1; continue
+            results.append({'image_id':iid,'status':'ok','cleared':changed})
+        except Exception as e:
+            results.append({'image_id':iid,'status':'error','reason':str(e)}); errors+=1
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback(); return {'error':'commit failed','results':results}, 500
+    return {'results':results,'errors':errors}
+
 @main.route('/export_project/<int:project_id>')
 @login_required
 def export_project(project_id):
@@ -1328,21 +1503,26 @@ def export_project(project_id):
     with zipfile.ZipFile(zip_buffer, 'w') as zipf:
         zipf.writestr('project_data.csv', csv_bytes.read())
         # Add images
+        # Collect unique image filenames across many-to-many relations
+        added=set()
         for phase in project.phases:
-            for img in phase.images:
+            for img in getattr(phase,'images_multi',[]):
+                if img.filename in added: continue
                 img_path = os.path.join(UPLOAD_FOLDER, img.filename)
                 if os.path.exists(img_path):
-                    zipf.write(img_path, f'images/{img.filename}')
+                    zipf.write(img_path, f'images/{img.filename}'); added.add(img.filename)
             for item in phase.items:
-                for img in item.images:
+                for img in getattr(item,'images_multi',[]):
+                    if img.filename in added: continue
                     img_path = os.path.join(UPLOAD_FOLDER, img.filename)
                     if os.path.exists(img_path):
-                        zipf.write(img_path, f'images/{img.filename}')
+                        zipf.write(img_path, f'images/{img.filename}'); added.add(img.filename)
                 for subitem in item.subitems:
-                    for img in subitem.images:
+                    for img in getattr(subitem,'images_multi',[]):
+                        if img.filename in added: continue
                         img_path = os.path.join(UPLOAD_FOLDER, img.filename)
                         if os.path.exists(img_path):
-                            zipf.write(img_path, f'images/{img.filename}')
+                            zipf.write(img_path, f'images/{img.filename}'); added.add(img.filename)
     zip_buffer.seek(0)
     return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name=f'project_{project.id}_export.zip')
 

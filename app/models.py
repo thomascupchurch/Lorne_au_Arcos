@@ -31,7 +31,7 @@ class Phase(db.Model):
     notes = db.Column(db.Text)
     sort_order = db.Column(db.Integer, default=0)
     items = db.relationship('Item', backref='phase', lazy=True)
-    images = db.relationship('Image', backref='phase', lazy=True)
+    # legacy one-to-many image relation removed; use Image.phases many-to-many (images_multi backref)
 
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -45,7 +45,7 @@ class Item(db.Model):
     notes = db.Column(db.Text)
     sort_order = db.Column(db.Integer, default=0)
     subitems = db.relationship('SubItem', backref='item', lazy=True)
-    images = db.relationship('Image', backref='item', lazy=True)
+    # legacy one-to-many image relation removed; use Image.items many-to-many (images_multi backref)
 
 class SubItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -58,14 +58,33 @@ class SubItem(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     notes = db.Column(db.Text)
     sort_order = db.Column(db.Integer, default=0)
-    images = db.relationship('Image', backref='subitem', lazy=True)
+    # legacy one-to-many image relation removed; use Image.subitems many-to-many (images_multi backref)
+
+"""Association tables to allow images to be linked to multiple hierarchical parts."""
+image_phase = db.Table(
+    'image_phase',
+    db.Column('image_id', db.Integer, db.ForeignKey('image.id'), primary_key=True),
+    db.Column('phase_id', db.Integer, db.ForeignKey('phase.id'), primary_key=True)
+)
+image_item = db.Table(
+    'image_item',
+    db.Column('image_id', db.Integer, db.ForeignKey('image.id'), primary_key=True),
+    db.Column('item_id', db.Integer, db.ForeignKey('item.id'), primary_key=True)
+)
+image_subitem = db.Table(
+    'image_subitem',
+    db.Column('image_id', db.Integer, db.ForeignKey('image.id'), primary_key=True),
+    db.Column('subitem_id', db.Integer, db.ForeignKey('sub_item.id'), primary_key=True)
+)
 
 class Image(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(256), nullable=False)
-    phase_id = db.Column(db.Integer, db.ForeignKey('phase.id'))
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'))
-    subitem_id = db.Column(db.Integer, db.ForeignKey('sub_item.id'))
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'))  # still track owning project/container
+    # Many-to-many relationships (optional links to parts)
+    phases = db.relationship('Phase', secondary=image_phase, backref=db.backref('images_multi', lazy='dynamic'))
+    items = db.relationship('Item', secondary=image_item, backref=db.backref('images_multi', lazy='dynamic'))
+    subitems = db.relationship('SubItem', secondary=image_subitem, backref=db.backref('images_multi', lazy='dynamic'))
 
 class DraftPart(db.Model):
     id = db.Column(db.Integer, primary_key=True)

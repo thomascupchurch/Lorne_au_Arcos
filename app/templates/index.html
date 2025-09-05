@@ -24,7 +24,10 @@
     .gantt .bar.external-bar,
     .gantt .bar-wrapper.external-bar .bar { fill:#4B4B4B !important; stroke:#4B4B4B !important; }
     /* Remove previous opacity tiers for clear color fidelity */
-        .gantt .bar.critical-path { stroke:#d90000 !important; stroke-width:2 !important; filter:drop-shadow(0 0 4px rgba(217,0,0,0.5)); }
+    /* Critical path bars: base orange. Additional hashed pattern applied dynamically when filter active */
+    .gantt .bar.critical-path { stroke:#FF8200 !important; fill:#FF8200 !important; stroke-width:2 !important; filter:drop-shadow(0 0 4px rgba(255,130,0,0.5)); }
+    .img-badges span { transition:transform .15s ease, background .2s ease; cursor:default; }
+    .img-badges span:hover { transform:scale(1.15); }
         /* Group band styling */
         .phase-group-band { fill:rgba(255,130,0,0.06); }
         body {
@@ -203,9 +206,9 @@
     <!-- Dark mode is now default -->
     <div class="container">
     <div class="image-viewer" id="image-viewer-panel">
-            <h2>Image Viewer</h2>
+            <h2 style="display:flex;align-items:center;gap:10px;">Image Viewer <button id="toggle-gallery" type="button" style="margin-left:auto;background:#444;color:#fff;border:none;padding:6px 12px;border-radius:20px;font-size:0.7em;font-weight:600;cursor:pointer;">Gallery View</button></h2>
             <form action="/upload" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" accept="image/png, image/jpeg, application/pdf">
+                <input type="file" name="file" accept="image/png, image/jpeg, application/pdf" multiple>
                 <select name="association-type" required>
                     <option value="">Associate With...</option>
                     <option value="phase">Phase</option>
@@ -227,9 +230,20 @@
                 <button type="submit">Upload</button>
             </form>
             <div id="image-viewer-thumbnails" style="display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;"></div>
+            <div id="gallery-controls" style="display:none;margin-bottom:6px;gap:10px;align-items:center;font-size:0.7em;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:4px;">Show
+                    <select id="gallery-filter" style="padding:4px 6px;border-radius:6px;border:1px solid #555;background:#222;color:#fff;">
+                        <option value="all">All Images</option>
+                        <option value="unassigned">Unassigned Only</option>
+                        <option value="assigned">Assigned Only</option>
+                    </select>
+                </label>
+            </div>
+            <div id="gallery-thumbnails" style="display:none;flex-wrap:wrap;gap:8px;align-content:flex-start;min-height:80px;"></div>
             <div id="full-image-container" class="empty">
                 <div id="placeholder-text" style="text-align:center;font-size:0.9em;line-height:1.4; padding:0 6px;">Select a phase, item, or sub-item to load images.</div>
                 <img id="full-image" src="" style="display:none;">
+                <iframe id="full-pdf" src="" style="display:none;width:100%;height:100%;border:none;flex:1 1 auto;"></iframe>
                 <button id="close-full-image" style="display:none;" onclick="hideFullImage()">Close</button>
             </div>
             <script id="all-images-data" type="application/json">[{% for img in images %}{"id":{{ img.id }},"filename":"{{ img.filename }}","url":"{{ url_for('main.uploaded_file', filename=img.filename) }}","phase_id":{{ img.phase_id if img.phase_id else 'null' }},"item_id":{{ img.item_id if img.item_id else 'null' }},"subitem_id":{{ img.subitem_id if img.subitem_id else 'null' }} }{% if not loop.last %},{% endif %}{% endfor %}]</script>
@@ -255,8 +269,8 @@
             </div>
                         <h2>Planning Section</h2>
                         <h3 style="margin-top:1.5em;">Project Part Creation</h3>
-                        <section id="holding-area" style="margin:10px 0 24px 0; border:1px solid #661a1a; padding:10px 12px; border-radius:10px; background:rgba(102,26,26,0.08);">
-                            <h4 style="margin:0 0 8px 0;color:#ff7777;font-size:0.95em;display:flex;align-items:center;gap:8px;">Holding Area (Draft Parts) <span style="font-weight:400;font-size:0.8em;opacity:.8;">Title-only drafts appear here as red chips until promoted.</span></h4>
+                        <section id="holding-area" style="margin:10px 0 24px 0; border:1px solid #FF8200; padding:10px 12px; border-radius:10px; background:rgba(255,130,0,0.08);">
+                            <h4 style="margin:0 0 8px 0;color:#FF8200;font-size:0.95em;display:flex;align-items:center;gap:8px;">Holding Area (Draft Parts) <span style="font-weight:400;font-size:0.8em;opacity:.8;">Title-only drafts appear here as orange chips until promoted.</span></h4>
                             <form id="draft-create-form" style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;">
                                 <div style="flex:3 1 220px;min-width:180px;">
                                     <label style="display:block;font-size:0.65em;opacity:.75;">Title *</label>
@@ -279,7 +293,7 @@
                                     </select>
                                 </div>
                                 <div style="flex:0 0 auto;">
-                                    <button type="submit" style="background:#aa0000;color:#fff;border:none;padding:0.55em 1em;border-radius:8px;font-weight:600;cursor:pointer;">Add Draft</button>
+                                    <button type="submit" style="background:#FF8200;color:#fff;border:none;padding:0.55em 1em;border-radius:8px;font-weight:600;cursor:pointer;">Add Draft</button>
                                 </div>
                             </form>
                             <div id="draft-bars" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;"></div>
@@ -299,17 +313,29 @@
                                               <div id="critical-legend" style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #ccc;padding:6px 10px;border-radius:10px;font-size:11px;">
                                                 <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FF8200;border-radius:3px;display:inline-block;border:1px solid #d96c00;"></span>Internal</span>
                                                 <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#4B4B4B;border-radius:3px;display:inline-block;border:1px solid #2f2f2f;"></span>External</span>
-                                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:linear-gradient(135deg,#FF8200 40%,#d90000 40%);border-radius:3px;display:inline-block;border:1px solid #d90000;box-shadow:0 0 4px rgba(217,0,0,0.5);"></span>Critical</span>
+                                                <span style="display:flex;align-items:center;gap:4px;"><span style="width:14px;height:14px;background:#FF8200;border-radius:3px;display:inline-block;border:1px solid #d96c00;box-shadow:0 0 4px rgba(255,130,0,0.5);"></span>Critical</span>
                                                 <div style="margin-left:8px;display:flex;gap:6px;">
-                                                    <button type="button" id="btn-critical-only" style="background:#d90000;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;">Show Critical Only</button>
+                                                    <button type="button" id="btn-critical-only" style="background:#FF8200;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;">Show Critical Only</button>
                                                     <button type="button" id="btn-critical-all" style="background:#666;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;display:none;">Show All</button>
                                                   <a id="btn-critical-export" href="/export_critical_csv" style="background:#FF8200;color:#fff;padding:4px 10px;border-radius:6px;font-weight:600;font-size:11px;text-decoration:none;">Export CSV</a>
+                                                                                                    <div style="display:flex;align-items:center;gap:4px;">
+                                                                                                        <label style="font-size:10px;color:#333;display:flex;align-items:center;gap:2px;">Scale
+                                                                                                            <select id="gantt-export-scale" style="font-size:10px;padding:2px 4px;border-radius:4px;">
+                                                                                                                <option value="1">1x</option>
+                                                                                                                <option value="1.5">1.5x</option>
+                                                                                                                <option value="2" selected>2x</option>
+                                                                                                                <option value="3">3x</option>
+                                                                                                            </select>
+                                                                                                        </label>
+                                                                                                        <label style="font-size:10px;color:#333;display:flex;align-items:center;gap:2px;">Legend<input type="checkbox" id="gantt-export-legend" checked style="margin-left:2px;"></label>
+                                                                                                        <button type="button" id="btn-gantt-png" style="background:#4B4B4B;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-weight:600;cursor:pointer;font-size:11px;">Export PNG</button>
+                                                                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                     <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px; position:relative;"></div>
                     <div id="critical-path-container" style="margin-top:0.5em; font-size:0.8em; background:#fff; padding:0.6em 0.8em; border-radius:10px; border:1px solid #ccc;">
-                              <strong>Critical Path:</strong> <span id="critical-path-list" style="color:#d90000;">(calculating...)</span>
+                              <strong>Critical Path:</strong> <span id="critical-path-list" style="color:#FF8200;">(calculating...)</span>
                               <div id="critical-badge-legend" style="margin-top:4px;font-size:0.7em;color:#444;">
                                   <em>Order badges</em> appear next to phases/items on the path.
                               </div>
@@ -451,8 +477,8 @@
                                         const chip=document.createElement('div');
                                         chip.className='draft-chip';
                                         chip.dataset.id=d.id; chip.dataset.type=d.type;
-                                        chip.style.cssText='background:#aa0000;color:#fff;padding:4px 10px;border-radius:18px;font-size:11px;font-weight:600;letter-spacing:.5px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.25);';
-                                        chip.innerHTML='<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+d.title+'</span><span style="background:#fff;color:#aa0000;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">'+d.type+'</span>';
+                                        chip.style.cssText='background:#FF8200;color:#fff;padding:4px 10px;border-radius:18px;font-size:11px;font-weight:600;letter-spacing:.5px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.25);';
+                                        chip.innerHTML='<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+d.title+'</span><span style="background:#fff;color:#FF8200;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">'+d.type+'</span>';
                                         chip.title='Click to promote';
                                         chip.addEventListener('click',()=> promptPromoteDraft(d));
                                         cont.appendChild(chip);
@@ -460,7 +486,7 @@
                                 }
                                 document.addEventListener('DOMContentLoaded', renderDrafts);
                                 const draftForm=document.getElementById('draft-create-form');
-                                if(draftForm){ draftForm.addEventListener('submit', function(e){ e.preventDefault(); const fd=new FormData(draftForm); fetch('/create_draft_part',{method:'POST',body:fd}).then(r=>r.json()).then(resp=>{ if(resp.status==='ok'){ draftData.push(resp.draft); renderDrafts(); draftForm.reset(); } else { alert(resp.error||'Draft create failed'); } }); }); }
+                                if(draftForm){ draftForm.addEventListener('submit', function(e){ e.preventDefault(); const projSel=document.getElementById('project-select'); if(!projSel || !projSel.value){ alert('Select a project first.'); return; } const fd=new FormData(draftForm); fetch('/create_draft_part',{method:'POST',body:fd}).then(r=>r.json()).then(resp=>{ if(resp.status==='ok'){ draftData.push(resp.draft); renderDrafts(); draftForm.reset(); } else { alert(resp.error||'Draft create failed'); } }); }); }
                                 function promptPromoteDraft(d){
                                     // Minimal prompt-based promotion for now; will swap to nice modal later
                                     const start = prompt('Start date (YYYY-MM-DD) for '+d.title+':'); if(!start) return;
@@ -1167,10 +1193,22 @@ function addLaneBands(){
         function showFullImage(src) {
             const cont = document.getElementById('full-image-container');
             const img = document.getElementById('full-image');
+            const pdf = document.getElementById('full-pdf');
             const ph = document.getElementById('placeholder-text');
             const closeBtn = document.getElementById('close-full-image');
-            img.src = src;
-            img.style.display = 'block';
+            if(!cont||!img||!pdf) return;
+            const lower = (src||'').toLowerCase();
+            if(lower.endsWith('.pdf')){
+                img.style.display='none';
+                img.src='';
+                pdf.src = src + '#view=FitH';
+                pdf.style.display='block';
+            } else {
+                pdf.style.display='none';
+                pdf.src='';
+                img.src = src;
+                img.style.display='block';
+            }
             closeBtn.style.display = 'inline-block';
             if (ph) ph.style.display = 'none';
             cont.classList.remove('empty');
@@ -1178,13 +1216,14 @@ function addLaneBands(){
         function hideFullImage() {
             const cont = document.getElementById('full-image-container');
             const img = document.getElementById('full-image');
+            const pdf = document.getElementById('full-pdf');
             const ph = document.getElementById('placeholder-text');
             const closeBtn = document.getElementById('close-full-image');
-            img.src = '';
-            img.style.display = 'none';
-            closeBtn.style.display = 'none';
+            if(img){ img.src=''; img.style.display='none'; }
+            if(pdf){ pdf.src=''; pdf.style.display='none'; }
+            if(closeBtn) closeBtn.style.display='none';
             if (ph) ph.style.display = 'block';
-            cont.classList.add('empty');
+            if(cont) cont.classList.add('empty');
         }
         // --- Image viewer resize logic ---
     (function(){
@@ -1239,7 +1278,7 @@ function addLaneBands(){
             try { ALL_IMAGES = JSON.parse(document.getElementById('all-images-data').textContent)||[]; } catch(e){ ALL_IMAGES=[]; }
             try { STRUCTURE = JSON.parse(document.getElementById('structure-data').textContent)||STRUCTURE; } catch(e){}
         })();
-        function loadAssociatedThumbnails(type, id){
+    function loadAssociatedThumbnails(type, id){
             const thumbWrap = document.getElementById('image-viewer-thumbnails');
             if(!thumbWrap) return;
             thumbWrap.innerHTML='';
@@ -1257,13 +1296,146 @@ function addLaneBands(){
             filtered.forEach(img=>{
                 const div=document.createElement('div');
                 div.style.cssText='display:inline-block;position:relative;';
-                const el=document.createElement('img');
-                el.src=img.url; el.title=img.filename; el.className='thumbnail';
-                el.onclick=()=>showFullImage(img.url);
-                div.appendChild(el);
+                const lower=(img.filename||'').toLowerCase();
+                let clickableEl = null;
+                if(lower.endsWith('.pdf')){
+                    const wrapper=document.createElement('div');
+                    wrapper.style.cssText='width:70px;height:70px;background:#fdf6ec;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;position:relative;font-size:11px;font-weight:600;color:#333;padding:4px;text-align:center;';
+                    wrapper.title=img.filename;
+                    wrapper.onclick=()=>showFullImage(img.url);
+                    wrapper.innerHTML='<span style="display:block;">PDF<br>Preview</span>';
+                    const badge=document.createElement('div');
+                    badge.textContent='PDF';
+                    badge.style.cssText='position:absolute;top:4px;right:4px;background:#FF8200;color:#fff;font-size:9px;padding:2px 5px;border-radius:8px;';
+                    wrapper.appendChild(badge);
+                    clickableEl = wrapper;
+                } else {
+                    const el=document.createElement('img');
+                    el.src=img.url; el.title=img.filename; el.className='thumbnail';
+                    el.onclick=()=>showFullImage(img.url);
+                    clickableEl = el;
+                }
+                const removeBtn=document.createElement('button');
+                removeBtn.type='button';
+                removeBtn.textContent='×';
+                removeBtn.title='Remove association';
+                removeBtn.style.cssText='position:absolute;top:-6px;left:-6px;background:#ff2e2e;color:#fff;border:none;width:20px;height:20px;border-radius:50%;font-size:14px;line-height:18px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.35);';
+                removeBtn.onclick=(ev)=>{ ev.stopPropagation(); unlinkImage(img); };
+                if(clickableEl){ div.appendChild(clickableEl); }
+                div.appendChild(removeBtn);
                 thumbWrap.appendChild(div);
             });
             showFullImage(filtered[0].url);
+        }
+                function buildGallery(){
+            const gal=document.getElementById('gallery-thumbnails'); if(!gal) return;
+            gal.innerHTML='';
+            // Only images belonging to selected project
+            const projSel=document.getElementById('project-select'); const pid = projSel && projSel.value ? parseInt(projSel.value) : null;
+                        const filter=document.getElementById('gallery-filter');
+                        const mode = filter ? filter.value : 'all';
+                        let list = ALL_IMAGES.filter(i=> !pid || i.project_id===pid);
+                        if(mode==='unassigned') list = list.filter(i=> !i.phase_id && !i.item_id && !i.subitem_id);
+                        if(mode==='assigned') list = list.filter(i=> i.phase_id || i.item_id || i.subitem_id);
+                        // lazy render (virtual) - cap initial batch then allow scroll append
+                        const BATCH=80; let index=0;
+                        function renderBatch(){
+                            const slice=list.slice(index,index+BATCH);
+                            slice.forEach(img=>{
+                                const box=document.createElement('div');
+                                box.style.cssText='width:80px;height:80px;position:relative;background:#fff;border-radius:10px;box-shadow:0 2px 4px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;overflow:hidden;cursor:grab;';
+                                box.draggable=true; box.dataset.imageId=img.id;
+                                const lower=(img.filename||'').toLowerCase();
+                                if(lower.endsWith('.pdf')){
+                                    box.innerHTML='<span style="font-size:11px;font-weight:700;text-align:center;padding:4px;color:#333;">PDF<br>File</span>';
+                                    const b=document.createElement('div'); b.textContent='PDF'; b.style.cssText='position:absolute;top:4px;right:4px;background:#FF8200;color:#fff;font-size:9px;padding:2px 5px;border-radius:8px;'; box.appendChild(b);
+                                } else {
+                                    const im=document.createElement('img'); im.src=img.url; im.loading='lazy'; im.style.cssText='max-width:100%;max-height:100%;object-fit:cover;'; box.appendChild(im);
+                                }
+                                // assignment badge
+                                if(img.phase_id || img.item_id || img.subitem_id){
+                                    const tag=document.createElement('div'); tag.textContent='Linked'; tag.style.cssText='position:absolute;bottom:2px;left:2px;background:#FF8200;color:#fff;font-size:9px;padding:2px 5px;border-radius:6px;'; box.appendChild(tag);
+                                }
+                                box.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', img.id); box.style.opacity='.5'; });
+                                box.addEventListener('dragend', ()=>{ box.style.opacity='1'; });
+                                gal.appendChild(box);
+                            });
+                            index += slice.length;
+                        }
+                        renderBatch();
+                        gal.onscroll = function(){
+                            if(gal.scrollTop + gal.clientHeight >= gal.scrollHeight - 10){
+                                if(index < list.length) renderBatch();
+                            }
+                        };
+        }
+        (function(){
+            const btn=document.getElementById('toggle-gallery');
+            if(!btn) return;
+                btn.addEventListener('click',()=>{
+                const gal=document.getElementById('gallery-thumbnails');
+                const assoc=document.getElementById('image-viewer-thumbnails');
+                const full=document.getElementById('full-image-container');
+                     const controls=document.getElementById('gallery-controls');
+                     if(gal.style.display==='none'){
+                         buildGallery(); gal.style.display='flex'; assoc.style.display='none'; full.style.display='none'; btn.textContent='Associated View'; if(controls) controls.style.display='flex';
+                     } else {
+                         gal.style.display='none'; assoc.style.display='flex'; full.style.display='flex'; btn.textContent='Gallery View'; if(controls) controls.style.display='none';
+                     }
+            });
+                const filter=document.getElementById('gallery-filter'); if(filter){ filter.addEventListener('change',()=>{ buildGallery(); }); }
+        })();
+        // Enable drop on hierarchy nodes
+        document.addEventListener('dragover', function(e){
+            const target = e.target.closest('.assoc-node');
+            if(target){ e.preventDefault(); target.classList.add('drag-over'); }
+        });
+        document.addEventListener('dragleave', function(e){
+            const t = e.target.closest('.assoc-node'); if(t) t.classList.remove('drag-over');
+        });
+        document.addEventListener('drop', function(e){
+            const node = e.target.closest('.assoc-node');
+            if(!node) return;
+            e.preventDefault(); node.classList.remove('drag-over');
+            const imageId = parseInt(e.dataTransfer.getData('text/plain'));
+            if(!imageId) return;
+            const ttype=node.dataset.type; const tid=node.dataset.id;
+            fetch('/associate_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_id:imageId,target_type:ttype,target_id:tid})})
+               .then(r=>r.json()).then(resp=>{
+                   if(resp.status==='ok'){
+                       const img=ALL_IMAGES.find(i=>i.id===imageId); if(img){
+                           img.phase_id = (ttype==='phase')?parseInt(tid):null;
+                           img.item_id = (ttype==='item')?parseInt(tid):null;
+                           img.subitem_id = (ttype==='subitem')?parseInt(tid):null;
+                       }
+                       // Refresh associated thumbnails if currently viewing that node
+                       if(node.classList.contains('selected-node')) loadAssociatedThumbnails(ttype, parseInt(tid));
+                        // flash feedback
+                        node.style.transition='background .4s';
+                        const oldBg=node.style.background; node.style.background='#ffe8c7';
+                        setTimeout(()=>{ node.style.background=oldBg; },450);
+                        const gal=document.getElementById('gallery-thumbnails'); if(gal && gal.style.display!=='none') buildGallery();
+                   } else { alert(resp.error||'Association failed'); }
+               });
+        });
+        function unlinkImage(img){
+            // Determine current context from selected node
+            const selected=document.querySelector('.assoc-node.selected-node');
+            let context_type=null, context_id=null;
+            if(selected){ context_type=selected.dataset.type; context_id=selected.dataset.id; }
+            fetch('/unlink_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_id:img.id,context_type,context_id})})
+              .then(r=>r.json())
+              .then(resp=>{
+                if(resp.status==='ok'){
+                   // Update local list: clear association values
+                   const target=ALL_IMAGES.find(a=>a.id===img.id);
+                   if(target){ if(context_type==='phase') target.phase_id=null; else if(context_type==='item') target.item_id=null; else if(context_type==='subitem') target.subitem_id=null; else { target.phase_id=target.item_id=target.subitem_id=null; } }
+                   if(selected && context_type){
+                      // reload thumbnails for current context
+                      loadAssociatedThumbnails(context_type, parseInt(context_id));
+                   }
+                } else { alert(resp.error||'Unlink failed'); }
+              });
         }
         document.addEventListener('click', function(e){
             const nodeLine = e.target.closest('.assoc-node');
@@ -1578,7 +1750,7 @@ function addLaneBands(){
                                          const badge=document.createElement('span');
                                          badge.className='crit-badge';
                                          badge.textContent=orderMap[id];
-                                         badge.style.cssText='margin-left:6px;background:#d90000;color:#fff;font-size:10px;font-weight:700;min-width:18px;text-align:center;padding:2px 5px;border-radius:10px;box-shadow:0 0 4px rgba(217,0,0,0.4);transition:transform .25s, background .25s;';
+                                         badge.style.cssText='margin-left:6px;background:#FF8200;color:#fff;font-size:10px;font-weight:700;min-width:18px;text-align:center;padding:2px 5px;border-radius:10px;box-shadow:0 0 4px rgba(255,130,0,0.4);transition:transform .25s, background .25s;';
                                          node.appendChild(badge);
                                      }
                                  });
@@ -1621,25 +1793,56 @@ function addLaneBands(){
                                  const svg=document.querySelector('#gantt-chart svg'); if(!svg) return;
                                  svg.querySelectorAll('.bar-wrapper .bar').forEach(r=>{ r.style.fillOpacity='1'; r.style.strokeOpacity='1'; });
                              }
-                      btnOnly.addEventListener('click', function(){
+                                 btnOnly.addEventListener('click', function(){
                          if(window._criticalFilterActive) return; window._criticalFilterActive=true;
                          const ids=new Set(criticalIds());
                          const filtered=(window._allGanttTasks||[]).filter(t=> ids.has(t.id));
                          rebuild(filtered);
                          btnOnly.style.display='none'; btnAll.style.display='inline-block';
                                  persistFilterState('on');
+                                     // color critical bars red
+                                     recolorCriticalBars(true);
                       });
                       btnAll.addEventListener('click', function(){
                          window._criticalFilterActive=false; rebuild(window._allGanttTasks||[]);
                          btnAll.style.display='none'; btnOnly.style.display='inline-block';
                                  persistFilterState('off');
+                                     recolorCriticalBars(false);
                       });
                       // If critical path updates externally, reapply filter
                       window._refreshCriticalFilter = function(){ if(window._criticalFilterActive){ const ids=new Set(criticalIds()); const filtered=(window._allGanttTasks||[]).filter(t=> ids.has(t.id)); rebuild(filtered);} };
                              function persistFilterState(state){ fetch('/set_critical_filter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({state})}).catch(()=>{}); }
                              // Apply saved state on load
-                               const saved = "{{ 'on' if critical_filter_active else 'off' }}";
-                             if(saved==='on'){ setTimeout(()=>{ btnOnly.click(); }, 50); }
+                                         const saved = "{{ 'on' if critical_filter_active else 'off' }}";
+                                         if(saved==='on'){ setTimeout(()=>{ btnOnly.click(); }, 50); }
+                                         function recolorCriticalBars(active){
+                                             const svg=document.querySelector('#gantt-chart svg'); if(!svg) return;
+                                             svg.querySelectorAll('.bar-wrapper .bar').forEach(r=>{
+                                                 if(r.classList.contains('critical-path')){
+                                                     // Always orange base
+                                                     r.style.stroke='#FF8200'; r.style.fill='#FF8200';
+                                                     // Apply hashed overlay only when filter active for visual emphasis
+                                                     if(active){
+                                                         // Use pattern fill via inline pattern creation
+                                                         let defs=svg.querySelector('defs');
+                                                         if(!defs){ defs=document.createElementNS('http://www.w3.org/2000/svg','defs'); svg.insertBefore(defs, svg.firstChild); }
+                                                         let pat=svg.querySelector('#crit-hash');
+                                                         if(!pat){
+                                                             pat=document.createElementNS('http://www.w3.org/2000/svg','pattern');
+                                                             pat.setAttribute('id','crit-hash'); pat.setAttribute('patternUnits','userSpaceOnUse'); pat.setAttribute('width','6'); pat.setAttribute('height','6');
+                                                             const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+                                                             path.setAttribute('d','M0 6 L6 0 M-1 1 L1 -1 M5 7 L7 5');
+                                                             path.setAttribute('stroke','#4B4B4B'); path.setAttribute('stroke-width','1');
+                                                             pat.appendChild(path); defs.appendChild(pat);
+                                                         }
+                                                         r.style.fill='url(#crit-hash)';
+                                                     } else {
+                                                         // Remove pattern (keep plain orange)
+                                                         if(r.style.fill && r.style.fill.startsWith('url(')) r.style.fill='#FF8200';
+                                                     }
+                                                 }
+                                             });
+                                         }
                              // Transition styling
                              const style=document.createElement('style'); style.textContent=`
                                  .assoc-node { transition: opacity .35s ease; }
@@ -1647,6 +1850,146 @@ function addLaneBands(){
                                  .crit-badge:hover { transform: scale(1.15); background:#a80000 !important; }
                              `; document.head.appendChild(style);
                   })();
+        // Gantt PNG Export
+        (function(){
+            const btn=document.getElementById('btn-gantt-png'); if(!btn) return;
+            function inlineStyles(svg){
+                // clone computed styles for robustness
+                const win=document.defaultView;
+                svg.querySelectorAll('*').forEach(el=>{
+                    const cs=win.getComputedStyle(el);
+                    const keep=['fill','stroke','stroke-width','font-size','font-family','font-weight','opacity','fill-opacity','stroke-opacity'];
+                    let style='';
+                    keep.forEach(k=>{ const v=cs.getPropertyValue(k); if(v) style+=k+':'+v+';'; });
+                    if(style) el.setAttribute('style', (el.getAttribute('style')||'')+style);
+                });
+            }
+            function exportPng(){
+                const svg=document.querySelector('#gantt-chart svg');
+                if(!svg){ alert('No Gantt chart to export.'); return; }
+                const scaleSel=document.getElementById('gantt-export-scale');
+                const legendChk=document.getElementById('gantt-export-legend');
+                const scale = parseFloat(scaleSel ? scaleSel.value : '2') || 2;
+                const clone=svg.cloneNode(true);
+                inlineStyles(clone);
+                // Wrap with optional header+legend group
+                let exportGroup=document.createElementNS('http://www.w3.org/2000/svg','g');
+                // Determine original bbox before modifications
+                const bbox=svg.getBBox();
+                let headerHeight=0;
+                if(legendChk && legendChk.checked){
+                    headerHeight=50; // reserve
+                    const title=document.createElementNS('http://www.w3.org/2000/svg','text');
+                    title.setAttribute('x', bbox.x+10); title.setAttribute('y', bbox.y + 20);
+                    title.setAttribute('font-size','16'); title.setAttribute('font-family','Segoe UI, Arial, sans-serif'); title.setAttribute('font-weight','600');
+                    title.setAttribute('fill','#333');
+                    title.textContent='Gantt Chart Export';
+                    exportGroup.appendChild(title);
+                    const legend=document.getElementById('critical-legend');
+                    if(legend){
+                        // Render simple legend swatches
+                        const legendGroup=document.createElementNS('http://www.w3.org/2000/svg','g');
+                        const items=[['Internal','#FF8200'],['External','#4B4B4B'],['Critical','#FF8200']];
+                        items.forEach((it,i)=>{
+                            const gx=bbox.x+10 + i*120;
+                            const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+                            rect.setAttribute('x', gx); rect.setAttribute('y', bbox.y+30); rect.setAttribute('width',14); rect.setAttribute('height',14); rect.setAttribute('rx',3); rect.setAttribute('ry',3); rect.setAttribute('fill', it[1]); rect.setAttribute('stroke', it[1]);
+                            legendGroup.appendChild(rect);
+                            const label=document.createElementNS('http://www.w3.org/2000/svg','text');
+                            label.setAttribute('x', gx+20); label.setAttribute('y', bbox.y+42); label.setAttribute('font-size','12'); label.setAttribute('font-family','Segoe UI, Arial, sans-serif'); label.setAttribute('fill','#333'); label.textContent=it[0];
+                            legendGroup.appendChild(label);
+                        });
+                        exportGroup.appendChild(legendGroup);
+                    }
+                }
+                // Shift cloned bars down if header
+                if(headerHeight){
+                    clone.querySelectorAll('*[y]').forEach(el=>{ const y=el.getAttribute('y'); if(y!==null && !isNaN(parseFloat(y))) el.setAttribute('y', parseFloat(y)+headerHeight); });
+                    clone.querySelectorAll('path').forEach(p=>{
+                        const d=p.getAttribute('d'); if(d && /[0-9]/.test(d) && d.includes('M')){ /* skip complex path shifting for simplicity */ }
+                    });
+                }
+                // Build root svg for export
+                const pad=20;
+                const width=bbox.width+pad*2;
+                const height=bbox.height+pad*2 + headerHeight;
+                const root=document.createElementNS('http://www.w3.org/2000/svg','svg');
+                root.setAttribute('xmlns','http://www.w3.org/2000/svg');
+                root.setAttribute('width', width);
+                root.setAttribute('height', height);
+                root.setAttribute('viewBox', `${bbox.x-pad} ${bbox.y-pad} ${width} ${height}`);
+                // Add white background
+                const bg=document.createElementNS('http://www.w3.org/2000/svg','rect');
+                bg.setAttribute('x', bbox.x-pad); bg.setAttribute('y', bbox.y-pad); bg.setAttribute('width', width); bg.setAttribute('height', height); bg.setAttribute('fill','#ffffff');
+                root.appendChild(bg);
+                if(exportGroup.childNodes.length){ root.appendChild(exportGroup); }
+                // Append cloned gantt group(s)
+                while(clone.childNodes.length){ root.appendChild(clone.firstChild); }
+                const serializer=new XMLSerializer();
+                let source=serializer.serializeToString(root);
+                if(!source.match(/^<svg[^>]+xmlns=/)) source = source.replace('<svg','<svg xmlns="http://www.w3.org/2000/svg"');
+                source='<?xml version="1.0" standalone="no"?>\n'+source;
+                const svgBlob=new Blob([source],{type:'image/svg+xml;charset=utf-8'});
+                const url=URL.createObjectURL(svgBlob);
+                const img=new Image();
+                img.onload=function(){
+                    try {
+                        const canvas=document.createElement('canvas');
+                        canvas.width=width*scale; canvas.height=height*scale;
+                        const ctx=canvas.getContext('2d');
+                        ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
+                        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+                        URL.revokeObjectURL(url);
+                        canvas.toBlob(function(blob){
+                            const a=document.createElement('a');
+                            const ts=new Date().toISOString().replace(/[:T]/g,'-').slice(0,19);
+                            a.download='gantt-'+ts+'.png';
+                            a.href=URL.createObjectURL(blob);
+                            document.body.appendChild(a); a.click(); a.remove();
+                            setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+                        },'image/png',0.92);
+                    } catch(e){ console.error(e); alert('Export failed. See console for details.'); }
+                };
+                img.onerror=function(){ URL.revokeObjectURL(url); alert('Failed to render SVG for export.'); };
+                img.src=url;
+            }
+            btn.addEventListener('click', exportPng);
+        })();
+        // Multi-association badges for images
+        (function(){
+            const thumbWrap = document.getElementById('image-viewer-thumbnails'); if(!thumbWrap) return;
+            async function fetchLinks(id){
+                const r=await fetch(`/image_links/${id}`); if(!r.ok) return null; return r.json();
+            }
+            async function decorateThumb(thumb){
+                if(!thumb || !thumb.dataset || !thumb.dataset.imageId) return;
+                const id=thumb.dataset.imageId;
+                const meta=await fetchLinks(id); if(!meta) return;
+                // Remove existing badge container
+                const old=thumb.parentElement.querySelector('.img-badges'); if(old) old.remove();
+                const box=document.createElement('div'); box.className='img-badges';
+                box.style.position='absolute'; box.style.left='2px'; box.style.bottom='2px'; box.style.display='flex'; box.style.flexWrap='wrap'; box.style.gap='2px';
+                const makeBadge=(label,color)=>{ const b=document.createElement('span'); b.textContent=label; b.style.background=color; b.style.color='#fff'; b.style.fontSize='9px'; b.style.padding='2px 4px'; b.style.borderRadius='10px'; b.style.fontWeight='600'; b.style.boxShadow='0 1px 3px rgba(0,0,0,0.4)'; return b; };
+                meta.phases.forEach(p=> box.appendChild(makeBadge('P'+p.id,'#FF8200')));
+                meta.items.forEach(i=> box.appendChild(makeBadge('I'+i.id,'#4B4B4B')));
+                meta.subitems.forEach(s=> box.appendChild(makeBadge('S'+s.id,'#2f2f2f')));
+                const holder=thumb.parentElement; holder.style.position='relative'; holder.appendChild(box);
+            }
+            // Observe thumbnail additions
+            const observer=new MutationObserver(muts=>{
+                muts.forEach(m=>{
+                    m.addedNodes.forEach(n=>{
+                        if(n.tagName==='IMG' && n.classList.contains('thumbnail')){ decorateThumb(n); }
+                        else if(n.querySelectorAll){ n.querySelectorAll('img.thumbnail').forEach(decorateThumb); }
+                    });
+                });
+            });
+            observer.observe(thumbWrap,{childList:true,subtree:true});
+            // Initial pass after load delay
+            setTimeout(()=> thumbWrap.querySelectorAll('img.thumbnail').forEach(decorateThumb),800);
+            // Expose refresh for other scripts
+            window.refreshImageBadges = function(){ thumbWrap.querySelectorAll('img.thumbnail').forEach(decorateThumb); };
+        })();
         // (No mutation observer for lane layout to avoid repeated upward shifts)
         function openEditModal(type, id, title, start, duration, milestone, internal_external, dependencies) {
             event.stopPropagation();

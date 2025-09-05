@@ -71,6 +71,7 @@ def create_app():
             ensure_column('phase', 'sort_order INTEGER DEFAULT 0')
             ensure_column('item', 'sort_order INTEGER DEFAULT 0')
             ensure_column('sub_item', 'sort_order INTEGER DEFAULT 0')
+            ensure_column('image', 'project_id INTEGER')
         except Exception:
             # Ignore migration issues silently to avoid startup failure
             pass
