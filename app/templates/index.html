@@ -5,10 +5,10 @@
     <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
     <style>
-    /* Gantt bar styling with opacity tiers for hierarchy containment (phase > item > subitem) */
+    /* Gantt bar styling with opacity tiers for hierarchy containment (phase > feature > item) */
     /* Uniform bar styling (reverted original thickness) */
     .gantt .bar { stroke-width:1; height:20px; rx:3; ry:3; }
-    .gantt .bar.subitem-bar, .gantt .bar.item-bar, .gantt .bar.phase-bar { height:20px; }
+    .gantt .bar.item-bar, .gantt .bar.feature-bar, .gantt .bar.phase-bar { height:20px; }
     /* Hide default per-task grid rows (we will supply 3 category lanes) */
     .gantt .grid .row:not(:first-child) { display:none; }
     .gantt .grid .row:first-child rect { height:120px !important; }
@@ -16,11 +16,11 @@
     .gantt .bar-wrapper .bar { transform-origin: left center; }
     /* Internal (default) vs external colors; handle class on rect OR wrapper */
     .gantt .bar.phase-bar,
+    .gantt .bar.feature-bar,
     .gantt .bar.item-bar,
-    .gantt .bar.subitem-bar,
     .gantt .bar-wrapper.phase-bar .bar,
-    .gantt .bar-wrapper.item-bar .bar,
-    .gantt .bar-wrapper.subitem-bar .bar { fill:#FF8200 !important; stroke:#FF8200 !important; }
+    .gantt .bar-wrapper.feature-bar .bar,
+    .gantt .bar-wrapper.item-bar .bar { fill:#FF8200 !important; stroke:#FF8200 !important; }
     .gantt .bar.external-bar,
     .gantt .bar-wrapper.external-bar .bar { fill:#4B4B4B !important; stroke:#4B4B4B !important; }
     /* Remove previous opacity tiers for clear color fidelity */
@@ -209,22 +209,22 @@
             <h2 style="display:flex;align-items:center;gap:10px;">Image Viewer <button id="toggle-gallery" type="button" style="margin-left:auto;background:#444;color:#fff;border:none;padding:6px 12px;border-radius:20px;font-size:0.7em;font-weight:600;cursor:pointer;">Gallery View</button></h2>
             <form action="/media/upload" method="post" enctype="multipart/form-data">
                 <input type="file" name="file" accept="image/png, image/jpeg, application/pdf" multiple>
-                <select name="association-type" required>
+                <select name="association-type">
                     <option value="">Associate With...</option>
                     <option value="phase">Phase</option>
+                    <option value="feature">Feature</option>
                     <option value="item">Item</option>
-                    <option value="subitem">Sub-Item</option>
                 </select>
-                <select name="association-id" required>
+                <select name="association-id">
                     <option value="">Select...</option>
                     {% for phase in phases %}
                         <option value="phase-{{ phase.id }}">Phase: {{ phase.title }}</option>
                     {% endfor %}
+                    {% for feature in features %}
+                        <option value="feature-{{ feature.id }}">Feature: {{ feature.title }}</option>
+                    {% endfor %}
                     {% for item in items %}
                         <option value="item-{{ item.id }}">Item: {{ item.title }}</option>
-                    {% endfor %}
-                    {% for subitem in subitems %}
-                        <option value="subitem-{{ subitem.id }}">Sub-Item: {{ subitem.title }}</option>
                     {% endfor %}
                 </select>
                 <button type="submit">Upload</button>
@@ -240,13 +240,13 @@
                 </label>
             </div>
             <div id="gallery-thumbnails" style="display:none;flex-wrap:wrap;gap:8px;align-content:flex-start;min-height:80px;"></div>
-            <div id="full-image-container" class="empty">
-                <div id="placeholder-text" style="text-align:center;font-size:0.9em;line-height:1.4; padding:0 6px;">Select a phase, item, or sub-item to load images.</div>
+                <div id="full-image-container" class="empty">
+                <div id="placeholder-text" style="text-align:center;font-size:0.9em;line-height:1.4; padding:0 6px;">Select a phase, feature, or item to load images.</div>
                 <img id="full-image" src="" style="display:none;">
                 <iframe id="full-pdf" src="" style="display:none;width:100%;height:100%;border:none;flex:1 1 auto;"></iframe>
                 <button id="close-full-image" style="display:none;" onclick="hideFullImage()">Close</button>
             </div>
-            <script id="all-images-data" type="application/json">[{% for img in images %}{"id":{{ img.id }},"filename":"{{ img.filename }}","url":"{{ url_for('media.uploaded_file', filename=img.filename) }}","phase_id":null,"item_id":null,"subitem_id":null }{% if not loop.last %},{% endif %}{% endfor %}]</script>
+            <script id="all-images-data" type="application/json">[{% for img in images %}{"id":{{ img.id }},"filename":"{{ img.filename }}","url":"{{ url_for('media.uploaded_file', filename=img.filename) }}","project_id":{{ img.project_id or 'null' }},"phase_id":null,"feature_id":null,"item_id":null }{% if not loop.last %},{% endif %}{% endfor %}]</script>
         </div>
     <div id="viewer-resize-handle" class="resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize image viewer" title="Drag to resize (double-click to reset)"></div>
                 <div class="planning-section">
@@ -277,12 +277,12 @@
                                     <input type="text" name="draft-title" placeholder="Draft Title" required style="width:100%;">
                                 </div>
                                 <div style="flex:1 1 130px;min-width:110px;">
-                                    <label style="display:block;font-size:0.65em;opacity:.75;">Type *</label>
-                                    <select name="draft-type" required style="width:100%;">
-                                        <option value="">—</option>
+                                    <label style="display:block;font-size:0.65em;opacity:.75;">Type (optional)</label>
+                                    <select name="draft-type" style="width:100%;">
+                                        <option value="">(none)</option>
                                         <option value="phase">Phase</option>
+                                        <option value="feature">Feature</option>
                                         <option value="item">Item</option>
-                                        <option value="subitem">SubItem</option>
                                     </select>
                                 </div>
                                 <div style="flex:1 1 130px;min-width:110px;">
@@ -398,8 +398,8 @@
                         <label style="display:block;font-size:0.7em;opacity:0.8;">Type</label>
                         <select name="part-type" id="part-type" required style="width:100%;">
                             <option value="phase">Phase</option>
+                            <option value="feature">Feature</option>
                             <option value="item">Item</option>
-                            <option value="subitem">Sub-Item</option>
                         </select>
                     </div>
                     <div style="flex:2 1 220px;min-width:200px;">
@@ -431,7 +431,7 @@
                         </select>
                     </div>
                     <div id="phase-select-wrapper" style="flex:1 1 160px;min-width:150px;display:none;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Phase (for Item)</label>
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Phase (for Feature)</label>
                         <select name="phase-id" id="unified-phase-id" style="width:100%;">
                             <option value="">Phase</option>
                             {% for phase in phases %}
@@ -439,18 +439,18 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div id="item-select-wrapper" style="flex:1 1 160px;min-width:150px;display:none;">
-                        <label style="display:block;font-size:0.7em;opacity:0.8;">Item (for Sub-Item)</label>
-                        <select name="item-id" id="unified-item-id" style="width:100%;">
-                            <option value="">Item</option>
-                            {% for item in items %}
-                            <option value="{{ item.id }}">{{ item.title }}</option>
+                    <div id="feature-select-wrapper" style="flex:1 1 160px;min-width:150px;display:none;">
+                        <label style="display:block;font-size:0.7em;opacity:0.8;">Feature (for Item)</label>
+                        <select name="feature-id" id="unified-feature-id" style="width:100%;">
+                            <option value="">Feature</option>
+                            {% for feature in features %}
+                            <option value="{{ feature.id }}">{{ feature.title }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div style="flex:1 1 200px;min-width:180px;">
                         <label style="display:block;font-size:0.7em;opacity:0.8;">Dependencies (IDs)</label>
-                        <input type="text" name="part-dependencies" placeholder="e.g. item-3, subitem-5" style="width:100%;">
+                        <input type="text" name="part-dependencies" placeholder="e.g. feature-3, item-5" style="width:100%;">
                     </div>
                     <div style="flex:0 0 90px;">
                         <label style="display:block;font-size:0.7em;opacity:0.8;">Milestone</label>
@@ -473,12 +473,19 @@
                                                 })();
                                 function renderDrafts(){
                                     const cont=document.getElementById('draft-bars'); if(!cont) return; cont.innerHTML='';
-                                    draftData.forEach(d=>{
+                                        draftData.forEach(d=>{
                                         const chip=document.createElement('div');
                                         chip.className='draft-chip';
                                         chip.dataset.id=d.id; chip.dataset.type=d.type;
+                                            chip.setAttribute('draggable','true');
+                                            chip.addEventListener('dragstart', ev=>{
+                                                ev.dataTransfer.setData('application/json', JSON.stringify({draftId:d.id}));
+                                                ev.dataTransfer.effectAllowed = 'move';
+                                            });
                                         chip.style.cssText='background:#FF8200;color:#fff;padding:4px 10px;border-radius:18px;font-size:11px;font-weight:600;letter-spacing:.5px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.25);';
-                                        chip.innerHTML='<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+d.title+'</span><span style="background:#fff;color:#FF8200;padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">'+d.type+'</span>';
+                                        const badge = d.type ? d.type : '?';
+                                        const badgeStyle = d.type ? 'background:#fff;color:#FF8200;' : 'background:#4B4B4B;color:#fff;'
+                                        chip.innerHTML='<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+d.title+'</span><span style="'+badgeStyle+'padding:2px 6px;border-radius:10px;font-size:10px;font-weight:700;">'+badge+'</span>';
                                         chip.title='Click to promote';
                                         chip.addEventListener('click',()=> promptPromoteDraft(d));
                                         cont.appendChild(chip);
@@ -487,14 +494,220 @@
                                 document.addEventListener('DOMContentLoaded', renderDrafts);
                                 const draftForm=document.getElementById('draft-create-form');
                                 if(draftForm){ draftForm.addEventListener('submit', function(e){ e.preventDefault(); const projSel=document.getElementById('project-select'); if(!projSel || !projSel.value){ alert('Select a project first.'); return; } const fd=new FormData(draftForm); fetch('/create_draft_part',{method:'POST',body:fd}).then(r=>r.json()).then(resp=>{ if(resp.status==='ok'){ draftData.push(resp.draft); renderDrafts(); draftForm.reset(); } else { alert(resp.error||'Draft create failed'); } }); }); }
+                                // Drag-drop promotion over Gantt
+                                (function(){
+                                    const ganttEl = document.getElementById('gantt-chart');
+                                    if(!ganttEl) return;
+                                                                    // Configurable default durations per inferred type
+                                                                    const DRAFT_DEFAULT_DUR = { phase:5, feature:3, item:1 };
+                                                                    // Track last inferred type during drag for fallback on drop
+                                                                    let _lastInferred = { type: 'phase', extra: {} };
+                                                                    let ghostEl = null;
+                                                                    function ensureGhost(){
+                                                                        if(!ghostEl){
+                                                                            ghostEl = document.createElement('div');
+                                                                            ghostEl.style.cssText='position:absolute;pointer-events:none;background:rgba(255,130,0,0.20);border:2px dashed #FF8200;height:26px;top:4px;left:0;display:none;z-index:50;border-radius:6px;';
+                                                                            ganttEl.style.position='relative';
+                                                                            ganttEl.appendChild(ghostEl);
+                                                                        }
+                                                                        return ghostEl;
+                                                                    }
+                                                                    function hideGhost(){ if(ghostEl) ghostEl.style.display='none'; }
+                                                                    function dateRange(){
+                                                                        if(window._ganttInstance && window._ganttInstance.gantt_start && window._ganttInstance.gantt_end){
+                                                                            return [window._ganttInstance.gantt_start, window._ganttInstance.gantt_end];
+                                                                        }
+                                                                        const tasks = window._ganttTasks||[];
+                                                                        let minDt=null,maxDt=null;
+                                                                        tasks.forEach(t=>{
+                                                                            if(t.start){ const d=new Date(t.start); if(!minDt || d<minDt) minDt=d; }
+                                                                            if(t.end){ const e=new Date(t.end); if(!maxDt || e>maxDt) maxDt=e; }
+                                                                        });
+                                                                        if(!minDt){ const now=new Date(); minDt=now; maxDt=new Date(now.getTime()+86400000*30); }
+                                                                        return [minDt,maxDt];
+                                                                    }
+                                                                    function _snapPhaseMonday(dt){
+                                                                        // Snap phases to Monday for coarse alignment
+                                                                        try {
+                                                                            const day = dt.getUTCDay(); // 0=Sun
+                                                                            const offset = (day===1)?0 : (day===0?6: (day-1));
+                                                                            if(offset>0){ dt.setUTCDate(dt.getUTCDate()-offset); }
+                                                                        } catch(e){}
+                                                                        return dt;
+                                                                    }
+                                                                    function mapXToDate(clientX, inferredType){
+                                                                        try {
+                                                                            const rect = ganttEl.getBoundingClientRect();
+                                                                            const relX = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+                                                                            const [start,end] = dateRange();
+                                                                            const totalMs = end - start;
+                                                                            const pxPerDay = rect.width / Math.max(1, totalMs / 86400000);
+                                                                            const dayFloat = relX / pxPerDay;
+                                                                            const offsetDays = Math.round(dayFloat); // snap to whole day for now
+                                                                            let dt = new Date(start.getTime() + offsetDays*86400000);
+                                                                            if(inferredType==='phase') dt=_snapPhaseMonday(dt);
+                                                                            return dt.toISOString().slice(0,10);
+                                                                        } catch(e){ return new Date().toISOString().slice(0,10);} }
+                                                                    function computeGhostPosition(clientX, inferred){
+                                                                        const rect = ganttEl.getBoundingClientRect();
+                                                                        const g = ensureGhost();
+                                                                        const [start,end] = dateRange();
+                                                                        const width = rect.width; const spanDays = Math.max(1,(end-start)/86400000);
+                                                                        const duration = DRAFT_DEFAULT_DUR[inferred] || 1;
+                                                                        const relX = Math.min(Math.max(clientX - rect.left,0), width);
+                                                                        const pxPerDay = width / spanDays;
+                                                                        g.style.left = Math.round(relX) + 'px';
+                                                                        g.style.width = Math.max(10, Math.round(duration * pxPerDay)) + 'px';
+                                                                        g.style.display='block';
+                                                                    }
+                                                                    function clearHighlights(){ document.querySelectorAll('.droppable-target').forEach(el=> el.classList.remove('droppable-target')); hideGhost(); }
+                                                                    const style = document.createElement('style');
+                                                                    style.textContent = '.droppable-target{outline:2px solid #FF8200; outline-offset:2px; }';
+                                                                    document.head.appendChild(style);
+                                    function computeDateFromXWrapper(clientX){ return mapXToDate(clientX); }
+                                    // Helper: find the rect.bar under a screen point using hit-testing; fallback to bbox scan
+                                    function findBarAtPoint(clientX, clientY){
+                                        try {
+                                            const el = document.elementFromPoint(clientX, clientY);
+                                            const isRectBar = (n)=> n && n.tagName && n.tagName.toLowerCase()==='rect' && /\bbar\b/.test(n.getAttribute('class')||'');
+                                            if(isRectBar(el)) return el;
+                                            // walk up for svg groups
+                                            if(el && el.closest){
+                                                const r = el.closest('rect.bar'); if(r) return r;
+                                            }
+                                            // Fallback: scan all rect.bar and pick first whose bounding box contains point
+                                            const svg = ganttEl.querySelector('svg'); if(!svg) return null;
+                                            const bars = svg.querySelectorAll('rect.bar');
+                                            for(const r of bars){
+                                                const b = r.getBoundingClientRect();
+                                                if(clientX>=b.left && clientX<=b.right && clientY>=b.top && clientY<=b.bottom) return r;
+                                            }
+                                        } catch(e) {}
+                                        return null;
+                                    }
+                                    ganttEl.addEventListener('dragover', ev=>{ ev.preventDefault(); });
+                                                                    ganttEl.addEventListener('drop', ev=>{
+                                        ev.preventDefault();
+                                        // Two payload types supported: draft JSON and gallery image id (text/plain)
+                                        let payload=null; try { payload = JSON.parse(ev.dataTransfer.getData('application/json')||'{}'); } catch(e){ payload=null; }
+                                        const imageIdRaw = ev.dataTransfer.getData('text/plain');
+                                        const imageId = imageIdRaw ? parseInt(imageIdRaw) : null;
+                                        // If image drop, associate to the part under cursor
+                                        if(!payload || !payload.draftId){
+                                            if(imageId){
+                                                const bar = findBarAtPoint(ev.clientX, ev.clientY);
+                                                if(!bar){ clearHighlights(); return; }
+                                                const id = bar.getAttribute('data-id')||'';
+                                                let target_type=null, target_id=null;
+                                                if(/^phase-/.test(id)){ target_type='phase'; target_id=id.split('-')[1]; }
+                                                else if(/^feature-/.test(id)){ target_type='feature'; target_id=id.split('-')[1]; }
+                                                else if(/^item-/.test(id)){ target_type='item'; target_id=id.split('-')[1]; }
+                                                if(target_type && target_id){
+                                                    fetch('/media/associate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ image_id:imageId, target_type, target_id }) })
+                                                      .then(r=> r.json())
+                                                      .then(resp=>{
+                                                        if(resp.status==='ok'){
+                                                            // Update local cache
+                                                            const obj = (typeof ALL_IMAGES!=='undefined'? ALL_IMAGES : []).find(i=> i.id===imageId);
+                                                            if(obj){ obj.phase_id = (target_type==='phase')?parseInt(target_id):null; obj.feature_id = (target_type==='feature')?parseInt(target_id):null; obj.item_id = (target_type==='item')?parseInt(target_id):null; }
+                                                            // brief highlight feedback
+                                                            try { bar.style.outline='2px solid #FF8200'; setTimeout(()=>{ bar.style.outline=''; }, 400); } catch(e){}
+                                                        } else { alert(resp.error||'Association failed'); }
+                                                        clearHighlights();
+                                                      })
+                                                      .catch(()=>{ alert('Network error associating image'); clearHighlights(); });
+                                                }
+                                            }
+                                            return; // not a draft drop
+                                        }
+                                        // Draft promotion flow
+                                        let targetBar = findBarAtPoint(ev.clientX, ev.clientY);
+                                        let inferred='phase'; let extra={};
+                                        if(targetBar){
+                                            const id = targetBar.getAttribute('data-id')||'';
+                                            if(/^phase-/.test(id)){ inferred='feature'; extra.phase_id=id.split('-')[1]; }
+                                            else if(/^feature-/.test(id)){ inferred='item'; extra.feature_id=id.split('-')[1]; }
+                                            else if(/^item-/.test(id)){ inferred='item'; extra.item_id=id.split('-')[1]; }
+                                        } else if(_lastInferred){
+                                            inferred = _lastInferred.type; extra = Object.assign({}, _lastInferred.extra);
+                                        }
+                                                                        const start = mapXToDate(ev.clientX, inferred);
+                                                                        const body = Object.assign({draft_id:payload.draftId, inferred_type:inferred, start:start, duration: DRAFT_DEFAULT_DUR[inferred]||1}, extra);
+                                        fetch('/promote_draft_auto', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+                                          .then(r=> r.json().then(j=>({ok:r.ok,data:j})))
+                                          .then(resp=>{
+                                            if(!resp.ok){ alert(resp.data.error||'Promotion failed'); return; }
+                                            // remove draft from list
+                                            const idx = draftData.findIndex(x=> x.id == payload.draftId);
+                                            if(idx>-1){ draftData.splice(idx,1); renderDrafts(); }
+                                            const t = resp.data.task; if(t){
+                                                if(!Array.isArray(window._ganttTasks)) window._ganttTasks=[];
+                                                window._ganttTasks.push(t);
+                                                const gc=document.getElementById('gantt-chart'); if(gc) gc.innerHTML='';
+                                                window._ganttInstance=new Gantt('#gantt-chart', window._ganttTasks,{ view_mode:'Day', bar_height:24, custom_popup_html:null, on_click:window._ganttClickHandler, on_date_change:window._ganttDateChangeHandler });
+                                                applyHierarchyVisuals(); enforceBarColors(); setTimeout(addLaneBands,0);
+                                            }
+                                            if(resp.data.critical_path){
+                                                const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=resp.data.critical_path.join(' → ');
+                                            }
+                                                                            clearHighlights();
+                                          }).catch(()=> alert('Network error promoting draft'));
+                                    });
+                                                                    ganttEl.addEventListener('dragenter', ev=>{
+                                                                        const targetBar = findBarAtPoint(ev.clientX, ev.clientY);
+                                                                        document.querySelectorAll('.droppable-target').forEach(el=> el.classList.remove('droppable-target'));
+                                                                        if(targetBar){ targetBar.classList.add('droppable-target'); }
+                                                                    });
+                                                                    ganttEl.addEventListener('dragover', ev=>{
+                                                                        let inferred='phase'; let extra={};
+                                                                        const targetBar = findBarAtPoint(ev.clientX, ev.clientY);
+                                                                        if(targetBar){ const id = targetBar.getAttribute('data-id')||''; if(/^phase-/.test(id)){ inferred='feature'; extra.phase_id=id.split('-')[1]; } else if(/^feature-/.test(id)){ inferred='item'; extra.feature_id=id.split('-')[1]; } else if(/^item-/.test(id)){ inferred='item'; extra.item_id=id.split('-')[1]; } }
+                                                                        _lastInferred = { type: inferred, extra };
+                                                                        computeGhostPosition(ev.clientX, inferred);
+                                                                    });
+                                                                    ganttEl.addEventListener('dragleave', ev=>{ if(!ganttEl.contains(ev.relatedTarget)) clearHighlights(); });
+                                                                    document.addEventListener('dragend', clearHighlights);
+                                                                })();
+                                                                // Hierarchy tree drops (if hierarchy exists with .assoc-node)
+                                                                (function(){
+                                                                    function inferFromNode(node){
+                                                                        const t = node && node.getAttribute('data-type');
+                                                                        if(t==='project') return { inferred:'phase', extra:{} };
+                                                                        if(t==='phase') return { inferred:'feature', extra:{ phase_id: node.getAttribute('data-id') } };
+                                                                        if(t==='feature') return { inferred:'item', extra:{ feature_id: node.getAttribute('data-id') } };
+                                                                        return null;
+                                                                    }
+                                                                    document.addEventListener('dragover', ev=>{
+                                                                        const n = ev.target.closest && ev.target.closest('.assoc-node');
+                                                                        if(n){ ev.preventDefault(); n.classList.add('droppable-target'); }
+                                                                    });
+                                                                    document.addEventListener('dragleave', ev=>{ const n=ev.target.closest && ev.target.closest('.assoc-node'); if(n && !n.contains(ev.relatedTarget)) n.classList.remove('droppable-target'); });
+                                                                    document.addEventListener('drop', ev=>{
+                                                                        const n = ev.target.closest && ev.target.closest('.assoc-node'); if(!n) return;
+                                                                        let payload; try { payload = JSON.parse(ev.dataTransfer.getData('application/json')||'{}'); } catch(e){ return; }
+                                                                        if(!payload.draftId) return;
+                                                                        ev.preventDefault();
+                                                                        const inf = inferFromNode(n); if(!inf) return;
+                                                                        const start = new Date().toISOString().slice(0,10);
+                                                                        const body = Object.assign({draft_id:payload.draftId, inferred_type:inf.inferred, start:start, duration: (window.DRAFT_DEFAULT_DUR && window.DRAFT_DEFAULT_DUR[inf.inferred]) || 1}, inf.extra);
+                                                                        fetch('/promote_draft_auto', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+                                                                          .then(r=> r.json().then(j=>({ok:r.ok,data:j})))
+                                                                          .then(resp=>{
+                                                                            if(!resp.ok){ alert(resp.data.error||'Promotion failed'); return; }
+                                                                            const idx = draftData.findIndex(x=> x.id == payload.draftId);
+                                                                            if(idx>-1){ draftData.splice(idx,1); renderDrafts(); }
+                                                                            if(resp.data.critical_path){ const cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent=resp.data.critical_path.join(' → ');}  
+                                                                          }).catch(()=> alert('Network error promoting draft'));
+                                                                    });
+                                })();
                                 function promptPromoteDraft(d){
                                     // Minimal prompt-based promotion for now; will swap to nice modal later
                                     const start = prompt('Start date (YYYY-MM-DD) for '+d.title+':'); if(!start) return;
                                     const duration = prompt('Duration (days):', '1'); if(!duration) return;
                                     let attach='';
                                     if(d.type==='phase') { const pid=prompt('Project ID to attach Phase to:'); if(!pid) return; attach+='&project-id='+encodeURIComponent(pid); }
-                                    if(d.type==='item') { const ph=prompt('Phase ID to attach Item to:'); if(!ph) return; attach+='&phase-id='+encodeURIComponent(ph); }
-                                    if(d.type==='subitem') { const it=prompt('Item ID to attach SubItem to:'); if(!it) return; attach+='&item-id='+encodeURIComponent(it); }
+                                    if(d.type==='feature') { const ph=prompt('Phase ID to attach Feature to:'); if(!ph) return; attach+='&phase-id='+encodeURIComponent(ph); }
+                                    if(d.type==='item') { const ft=prompt('Feature ID to attach Item to:'); if(!ft) return; attach+='&feature-id='+encodeURIComponent(ft); }
                                     fetch('/promote_draft/'+d.id,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'start-date='+encodeURIComponent(start)+'&duration='+encodeURIComponent(duration)+attach})
                                                         .then(r=>r.json()).then(resp=>{
                                                             if(resp.status==='ok'){
@@ -510,7 +723,7 @@
                     const typeSel = document.getElementById('part-type');
                     const projWrap = document.getElementById('project-select-wrapper');
                     const phaseWrap = document.getElementById('phase-select-wrapper');
-                    const itemWrap = document.getElementById('item-select-wrapper');
+                    const featureWrap = document.getElementById('feature-select-wrapper');
                     const form = document.getElementById('unified-part-form');
                     const depInput = form.querySelector('input[name="part-dependencies"]');
                     // Sync selected project from global project selector if present
@@ -527,8 +740,8 @@
                     function updateVisibility(){
                         const v = typeSel.value;
                         projWrap.style.display = (v==='phase') ? 'block':'none';
-                        phaseWrap.style.display = (v==='item') ? 'block':'none';
-                        itemWrap.style.display = (v==='subitem') ? 'block':'none';
+                        phaseWrap.style.display = (v==='feature') ? 'block':'none';
+                        featureWrap.style.display = (v==='item') ? 'block':'none';
                     }
                     typeSel.addEventListener('change', updateVisibility);
                     updateVisibility();
@@ -625,13 +838,6 @@
                                         const tc = wrapper.nextElementSibling; // children container
                                         if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', resp.data.hierarchy_snippet);
                                     }
-                                } else if(resp.data.part_type==='subitem') {
-                                    const itemNode = document.querySelector(`div.tree-children [data-type="item"][data-id="${resp.data.parent_ids.item_id}"]`);
-                                    if(itemNode){
-                                        const wrapper = itemNode.parentElement;
-                                        const tc = wrapper.nextElementSibling;
-                                        if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', resp.data.hierarchy_snippet);
-                                    }
                                 }
                             }
                             // Update dependency pool and calendar
@@ -710,58 +916,58 @@
                                     </form>
                                 </div>
                                 <div class="tree-children">
-                                    {% for item in phase.items %}
+                                    {% for feature in phase.features %}
                                     <div style="margin:2px 0;">
-                                        <div class="node-line assoc-node" data-type="item" data-id="{{ item.id }}">
+                                        <div class="node-line assoc-node" data-type="feature" data-id="{{ feature.id }}">
                                             <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
-                                            <strong>Item:</strong> {{ item.title }} <span class="meta">{{ item.start_date }} / {{ item.duration }}d</span>
-                                                                                        {% if item.notes %}<span title="{{ item.notes|e }}" style="color:#FF8200;font-size:0.7em;margin-left:4px;">📝</span>{% endif %}
+                                            <strong>Feature:</strong> {{ feature.title }} <span class="meta">{{ feature.start_date }} / {{ feature.duration }}d</span>
+                                                                                        {% if feature.notes %}<span title="{{ feature.notes|e }}" style="color:#FF8200;font-size:0.7em;margin-left:4px;">📝</span>{% endif %}
                                             <span class="actions">
-                                                <form method="post" action="/delete_item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Delete item?');"><button type="submit" style="color:red;">Del</button></form>
-                                                <button type="button" class="small" onclick="toggleEdit('item-edit-{{ item.id }}')">Edit</button>
+                                                <form method="post" action="/delete_feature/{{ feature.id }}" style="display:inline;" onsubmit="return confirm('Delete feature?');"><button type="submit" style="color:red;">Del</button></form>
+                                                <button type="button" class="small" onclick="toggleEdit('feature-edit-{{ feature.id }}')">Edit</button>
                                             </span>
                                         </div>
-                                        <div id="item-edit-{{ item.id }}" class="inline-edit" style="display:none;">
-                                            <form method="post" action="/edit_item/{{ item.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-                                                <input type="text" name="item-title" value="{{ item.title }}" required>
-                                                <input type="date" name="item-start" value="{{ item.start_date }}" required>
-                                                <input type="number" name="item-duration" value="{{ item.duration }}" required style="width:70px;">
-                                                <input type="text" name="item-dependencies" value="{{ item.dependencies or '' }}" placeholder="Deps" style="width:90px;">
-                                                <label style="font-size:0.65em;">M <input type="checkbox" name="item-milestone" {% if item.is_milestone %}checked{% endif %}></label>
-                                                <select name="item-type">
-                                                    <option value="internal" {% if item.internal_external=='internal' %}selected{% endif %}>Int</option>
-                                                    <option value="external" {% if item.internal_external=='external' %}selected{% endif %}>Ext</option>
+                                        <div id="feature-edit-{{ feature.id }}" class="inline-edit" style="display:none;">
+                                            <form method="post" action="/edit_feature/{{ feature.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+                                                <input type="text" name="feature-title" value="{{ feature.title }}" required>
+                                                <input type="date" name="feature-start" value="{{ feature.start_date }}" required>
+                                                <input type="number" name="feature-duration" value="{{ feature.duration }}" required style="width:70px;">
+                                                <input type="text" name="feature-dependencies" value="{{ feature.dependencies or '' }}" placeholder="Deps" style="width:90px;">
+                                                <label style="font-size:0.65em;">M <input type="checkbox" name="feature-milestone" {% if feature.is_milestone %}checked{% endif %}></label>
+                                                <select name="feature-type">
+                                                    <option value="internal" {% if feature.internal_external=='internal' %}selected{% endif %}>Int</option>
+                                                    <option value="external" {% if feature.internal_external=='external' %}selected{% endif %}>Ext</option>
                                                 </select>
-                                                                                            <textarea name="item-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ item.notes or '' }}</textarea>
+                                                <textarea name="feature-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ feature.notes or '' }}</textarea>
                                                 <button type="submit">Save</button>
-                                                <button type="button" onclick="toggleEdit('item-edit-{{ item.id }}')">Cancel</button>
+                                                <button type="button" onclick="toggleEdit('feature-edit-{{ feature.id }}')">Cancel</button>
                                             </form>
                                         </div>
                                         <div class="tree-children">
-                                            {% for subitem in item.subitems %}
+                                            {% for item in feature.items %}
                                             <div style="margin:2px 0;">
-                                                <div class="node-line assoc-node" data-type="subitem" data-id="{{ subitem.id }}">
-                                                    <strong>Sub:</strong> {{ subitem.title }} <span class="meta">{{ subitem.start_date }} / {{ subitem.duration }}d</span>
-                                                                                                        {% if subitem.notes %}<span title="{{ subitem.notes|e }}" style="color:#FF8200;font-size:0.65em;margin-left:4px;">📝</span>{% endif %}
+                                                <div class="node-line assoc-node" data-type="item" data-id="{{ item.id }}">
+                                                    <strong>Item:</strong> {{ item.title }} <span class="meta">{{ item.start_date }} / {{ item.duration }}d</span>
+                                                    {% if item.notes %}<span title="{{ item.notes|e }}" style="color:#FF8200;font-size:0.65em;margin-left:4px;">📝</span>{% endif %}
                                                     <span class="actions">
-                                                        <form method="post" action="/delete_subitem/{{ subitem.id }}" style="display:inline;" onsubmit="return confirm('Delete sub-item?');"><button type="submit" style="color:red;">Del</button></form>
-                                                        <button type="button" class="small" onclick="toggleEdit('subitem-edit-{{ subitem.id }}')">Edit</button>
+                                                        <form method="post" action="/delete_item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Delete item?');"><button type="submit" style="color:red;">Del</button></form>
+                                                        <button type="button" class="small" onclick="toggleEdit('item-edit-{{ item.id }}')">Edit</button>
                                                     </span>
                                                 </div>
-                                                <div id="subitem-edit-{{ subitem.id }}" class="inline-edit" style="display:none;">
-                                                    <form method="post" action="/edit_subitem/{{ subitem.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
-                                                        <input type="text" name="subitem-title" value="{{ subitem.title }}" required>
-                                                        <input type="date" name="subitem-start" value="{{ subitem.start_date }}" required>
-                                                        <input type="number" name="subitem-duration" value="{{ subitem.duration }}" required style="width:70px;">
-                                                        <input type="text" name="subitem-dependencies" value="{{ subitem.dependencies or '' }}" placeholder="Deps" style="width:90px;">
-                                                        <label style="font-size:0.65em;">M <input type="checkbox" name="subitem-milestone" {% if subitem.is_milestone %}checked{% endif %}></label>
-                                                        <select name="subitem-type">
-                                                            <option value="internal" {% if subitem.internal_external=='internal' %}selected{% endif %}>Int</option>
-                                                            <option value="external" {% if subitem.internal_external=='external' %}selected{% endif %}>Ext</option>
+                                                <div id="item-edit-{{ item.id }}" class="inline-edit" style="display:none;">
+                                                    <form method="post" action="/edit_item/{{ item.id }}" style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+                                                        <input type="text" name="item-title" value="{{ item.title }}" required>
+                                                        <input type="date" name="item-start" value="{{ item.start_date }}" required>
+                                                        <input type="number" name="item-duration" value="{{ item.duration }}" required style="width:70px;">
+                                                        <input type="text" name="item-dependencies" value="{{ item.dependencies or '' }}" placeholder="Deps" style="width:90px;">
+                                                        <label style="font-size:0.65em;">M <input type="checkbox" name="item-milestone" {% if item.is_milestone %}checked{% endif %}></label>
+                                                        <select name="item-type">
+                                                            <option value="internal" {% if item.internal_external=='internal' %}selected{% endif %}>Int</option>
+                                                            <option value="external" {% if item.internal_external=='external' %}selected{% endif %}>Ext</option>
                                                         </select>
-                                                                                                            <textarea name="subitem-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ subitem.notes or '' }}</textarea>
+                                                        <textarea name="item-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ item.notes or '' }}</textarea>
                                                         <button type="submit">Save</button>
-                                                        <button type="button" onclick="toggleEdit('subitem-edit-{{ subitem.id }}')">Cancel</button>
+                                                        <button type="button" onclick="toggleEdit('item-edit-{{ item.id }}')">Cancel</button>
                                                     </form>
                                                 </div>
                                             </div>
@@ -827,8 +1033,8 @@ function renderGantt(){
             if(!task || !task.id) return;
             let type = null; let rawId = null;
             if(task.id.startsWith('phase-')) { type='phase'; rawId=parseInt(task.id.replace('phase-','')); }
+            else if(task.id.startsWith('feature-')) { type='feature'; rawId=parseInt(task.id.replace('feature-','')); }
             else if(task.id.startsWith('item-')) { type='item'; rawId=parseInt(task.id.replace('item-','')); }
-            else if(task.id.startsWith('subitem-')) { type='subitem'; rawId=parseInt(task.id.replace('subitem-','')); }
             if(type && !isNaN(rawId)) {
                 document.querySelectorAll('.assoc-node.selected-node').forEach(n=> n.classList.remove('selected-node'));
                 const node = document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rawId}"]`);
@@ -847,8 +1053,8 @@ function renderGantt(){
             try {
                 let nodeSel = null;
                 if(task.id.startsWith('phase-')) nodeSel = `.assoc-node[data-type="phase"][data-id="${task.id.replace('phase-','')}"]`;
+                else if(task.id.startsWith('feature-')) nodeSel = `.assoc-node[data-type="feature"][data-id="${task.id.replace('feature-','')}"]`;
                 else if(task.id.startsWith('item-')) nodeSel = `.assoc-node[data-type="item"][data-id="${task.id.replace('item-','')}"]`;
-                else if(task.id.startsWith('subitem-')) nodeSel = `.assoc-node[data-type="subitem"][data-id="${task.id.replace('subitem-','')}"]`;
                 if(nodeSel){ const node=document.querySelector(nodeSel); if(node){ const meta=node.querySelector('.meta'); if(meta){ meta.textContent = `${s} / ${resp.data.duration}d`; } } }
                 if(window._calendarInstance){
                     const evt = window._calendarInstance.getEventById(task.id);
@@ -897,9 +1103,9 @@ function inPlaceCascadeApply(adjustments, newCriticalPath){
         }
         // Update hierarchy meta display
         let nodeSel=null;
-        if(adj.id.startsWith('phase-')) nodeSel = `.assoc-node[data-type="phase"][data-id="${adj.id.replace('phase-','')}"]`;
-        else if(adj.id.startsWith('item-')) nodeSel = `.assoc-node[data-type="item"][data-id="${adj.id.replace('item-','')}"]`;
-        else if(adj.id.startsWith('subitem-')) nodeSel = `.assoc-node[data-type="subitem"][data-id="${adj.id.replace('subitem-','')}"]`;
+    if(adj.id.startsWith('phase-')) nodeSel = `.assoc-node[data-type="phase"][data-id="${adj.id.replace('phase-','')}"]`;
+    else if(adj.id.startsWith('feature-')) nodeSel = `.assoc-node[data-type="feature"][data-id="${adj.id.replace('feature-','')}"]`;
+    else if(adj.id.startsWith('item-')) nodeSel = `.assoc-node[data-type="item"][data-id="${adj.id.replace('item-','')}"]`;
         if(nodeSel){
             const node=document.querySelector(nodeSel);
             if(node){
@@ -951,22 +1157,21 @@ function insertHierarchySnippet(partType, snippet, parents){
                 if(treeChildren){ treeChildren.insertAdjacentHTML('beforeend', snippet); }
             }
         }
-    } else if(partType==='item'){
+    } else if(partType==='feature'){
         const phaseId = parents && parents.phase_id;
         if(phaseId){
             const phaseNode = document.querySelector(`.assoc-node[data-type="phase"][data-id="${phaseId}"]`);
             if(phaseNode){
-                // The next sibling .tree-children contains its items
                 let sib = phaseNode.parentElement.nextElementSibling;
                 if(sib && sib.classList.contains('tree-children')){ sib.insertAdjacentHTML('beforeend', snippet); }
             }
         }
-    } else if(partType==='subitem'){
-        const itemId = parents && parents.item_id;
-        if(itemId){
-            const itemNode = document.querySelector(`.assoc-node[data-type="item"][data-id="${itemId}"]`);
-            if(itemNode){
-                let sib = itemNode.parentElement.nextElementSibling;
+    } else if(partType==='item'){
+        const featureId = parents && parents.feature_id;
+        if(featureId){
+            const featureNode = document.querySelector(`.assoc-node[data-type="feature"][data-id="${featureId}"]`);
+            if(featureNode){
+                let sib = featureNode.parentElement.nextElementSibling;
                 if(sib && sib.classList.contains('tree-children')){ sib.insertAdjacentHTML('beforeend', snippet); }
             }
         }
@@ -983,15 +1188,15 @@ function insertPromotedSnippet(partType, snippet, parents){
             const projNode=document.querySelector(`.project-block .assoc-node[data-type="project"][data-id="${projId}"]`);
             if(projNode){ const tc=projNode.parentElement.querySelector(':scope > .tree-children'); if(tc) tc.insertAdjacentHTML('beforeend', snippet); }
         }
-    } else if(partType==='item'){
+    } else if(partType==='feature'){
         const phaseId = parents && parents.phase_id; if(phaseId){
             const phaseNode=document.querySelector(`.assoc-node[data-type="phase"][data-id="${phaseId}"]`);
             if(phaseNode){ const tc=phaseNode.parentElement.nextElementSibling; if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', snippet); }
         }
-    } else if(partType==='subitem'){
-        const itemId = parents && parents.item_id; if(itemId){
-            const itemNode=document.querySelector(`.assoc-node[data-type="item"][data-id="${itemId}"]`);
-            if(itemNode){ const tc=itemNode.parentElement.nextElementSibling; if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', snippet); }
+    } else if(partType==='item'){
+        const featureId = parents && parents.feature_id; if(featureId){
+            const featureNode=document.querySelector(`.assoc-node[data-type="feature"][data-id="${featureId}"]`);
+            if(featureNode){ const tc=featureNode.parentElement.nextElementSibling; if(tc && tc.classList.contains('tree-children')) tc.insertAdjacentHTML('beforeend', snippet); }
         }
     }
 }
@@ -1040,7 +1245,7 @@ document.getElementById('unified-edit-form').addEventListener('submit', function
     const payload = new FormData(this);
     // Map to existing endpoints
     let url=null;
-    if(kind==='phase') url='/edit_phase/'+id; else if(kind==='item') url='/edit_item/'+id; else if(kind==='subitem') url='/edit_subitem/'+id;
+    if(kind==='phase') url='/edit_phase/'+id; else if(kind==='feature') url='/edit_feature/'+id; else if(kind==='item') url='/edit_item/'+id;
     if(!url) return;
     fetch(url, {method:'POST', body:payload})
     .then(()=>{ window.location.reload(); })
@@ -1087,17 +1292,17 @@ function addLaneBands(){
                         svg.querySelectorAll('rect[data-cat-band]').forEach(r=>r.remove());
                         const wrappers = Array.from(svg.querySelectorAll('.bar-wrapper'));
                         if(!wrappers.length) return;
-                        const catYs = { phase: [], item: [], subitem: [] };
+                        const catYs = { phase: [], feature: [], item: [] };
                         wrappers.forEach(w=>{
                             const rect = w.querySelector('rect.bar'); if(!rect) return;
                             const classes = (w.getAttribute('class') + ' ' + rect.getAttribute('class'));
-                            let cat='subitem';
-                            if(/phase-bar/.test(classes)) cat='phase'; else if(/item-bar/.test(classes) && !/phase-bar/.test(classes)) cat='item';
+                            let cat='item';
+                            if(/phase-bar/.test(classes)) cat='phase'; else if(/feature-bar/.test(classes)) cat='feature'; else if(/item-bar/.test(classes)) cat='item';
                             const m = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(w.getAttribute('transform')||'');
                             if(m) catYs[cat].push(parseFloat(m[2]));
                         });
                         const width = (svg.viewBox && svg.viewBox.baseVal)? svg.viewBox.baseVal.width : (svg.getAttribute('width')||1200);
-                        const colors = { phase: 'rgba(255,130,0,0.05)', item: 'rgba(75,75,75,0.06)', subitem: 'rgba(0,0,0,0.04)' };
+                        const colors = { phase: 'rgba(255,130,0,0.05)', feature: 'rgba(75,75,75,0.06)', item: 'rgba(0,0,0,0.04)' };
                         Object.keys(catYs).forEach(cat=>{
                             if(!catYs[cat].length) return;
                             catYs[cat].sort((a,b)=>a-b);
@@ -1281,8 +1486,8 @@ function addLaneBands(){
             function stopTouch(){ dragging=false; document.documentElement.classList.remove('resizing'); window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', stopTouch); }
         })();
         // --- Dynamic Image Associations ---
-        let ALL_IMAGES = [];
-        let STRUCTURE = {phases:[],items:[],subitems:[]};
+    let ALL_IMAGES = [];
+    let STRUCTURE = {phases:[],features:[],items:[]};
         (function(){
             try { ALL_IMAGES = JSON.parse(document.getElementById('all-images-data').textContent)||[]; } catch(e){ ALL_IMAGES=[]; }
             try { STRUCTURE = JSON.parse(document.getElementById('structure-data').textContent)||STRUCTURE; } catch(e){}
@@ -1293,13 +1498,13 @@ function addLaneBands(){
             thumbWrap.innerHTML='';
             let filtered = [];
             if(type==='phase') filtered = ALL_IMAGES.filter(i=>i.phase_id===id);
+            else if(type==='feature') filtered = ALL_IMAGES.filter(i=>i.feature_id===id);
             else if(type==='item') filtered = ALL_IMAGES.filter(i=>i.item_id===id);
-            else if(type==='subitem') filtered = ALL_IMAGES.filter(i=>i.subitem_id===id);
             else if(type==='project') {
                 const phaseIds = STRUCTURE.phases.filter(p=>p.project_id===id).map(p=>p.id);
-                const itemIds = STRUCTURE.items.filter(it=> phaseIds.includes(it.phase_id)).map(it=>it.id);
-                const subIds = STRUCTURE.subitems.filter(si=> itemIds.includes(si.item_id)).map(si=>si.id);
-                filtered = ALL_IMAGES.filter(i=> (i.phase_id && phaseIds.includes(i.phase_id)) || (i.item_id && itemIds.includes(i.item_id)) || (i.subitem_id && subIds.includes(i.subitem_id)) );
+                const featureIds = STRUCTURE.features.filter(f=> phaseIds.includes(f.phase_id)).map(f=>f.id);
+                const itemIds = STRUCTURE.items.filter(it=> featureIds.includes(it.feature_id)).map(it=>it.id);
+                filtered = ALL_IMAGES.filter(i=> (i.phase_id && phaseIds.includes(i.phase_id)) || (i.feature_id && featureIds.includes(i.feature_id)) || (i.item_id && itemIds.includes(i.item_id)) );
             } else filtered = [];
             if(filtered.length===0){ hideFullImage(); const ph=document.getElementById('placeholder-text'); if(ph) ph.textContent='No images associated.'; return; }
             filtered.forEach(img=>{
@@ -1344,8 +1549,8 @@ function addLaneBands(){
                         const filter=document.getElementById('gallery-filter');
                         const mode = filter ? filter.value : 'all';
                         let list = ALL_IMAGES.filter(i=> !pid || i.project_id===pid);
-                        if(mode==='unassigned') list = list.filter(i=> !i.phase_id && !i.item_id && !i.subitem_id);
-                        if(mode==='assigned') list = list.filter(i=> i.phase_id || i.item_id || i.subitem_id);
+                        if(mode==='unassigned') list = list.filter(i=> !i.phase_id && !i.feature_id && !i.item_id);
+                        if(mode==='assigned') list = list.filter(i=> i.phase_id || i.feature_id || i.item_id);
                         // lazy render (virtual) - cap initial batch then allow scroll append
                         const BATCH=80; let index=0;
                         function renderBatch(){
@@ -1362,7 +1567,7 @@ function addLaneBands(){
                                     const im=document.createElement('img'); im.src=img.url; im.loading='lazy'; im.style.cssText='max-width:100%;max-height:100%;object-fit:cover;'; box.appendChild(im);
                                 }
                                 // assignment badge
-                                if(img.phase_id || img.item_id || img.subitem_id){
+                                if(img.phase_id || img.feature_id || img.item_id){
                                     const tag=document.createElement('div'); tag.textContent='Linked'; tag.style.cssText='position:absolute;bottom:2px;left:2px;background:#FF8200;color:#fff;font-size:9px;padding:2px 5px;border-radius:6px;'; box.appendChild(tag);
                                 }
                                 box.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', img.id); box.style.opacity='.5'; });
@@ -1414,8 +1619,8 @@ function addLaneBands(){
                    if(resp.status==='ok'){
                        const img=ALL_IMAGES.find(i=>i.id===imageId); if(img){
                            img.phase_id = (ttype==='phase')?parseInt(tid):null;
+                           img.feature_id = (ttype==='feature')?parseInt(tid):null;
                            img.item_id = (ttype==='item')?parseInt(tid):null;
-                           img.subitem_id = (ttype==='subitem')?parseInt(tid):null;
                        }
                        // Refresh associated thumbnails if currently viewing that node
                        if(node.classList.contains('selected-node')) loadAssociatedThumbnails(ttype, parseInt(tid));
@@ -1438,7 +1643,7 @@ function addLaneBands(){
                 if(resp.status==='ok'){
                    // Update local list: clear association values
                    const target=ALL_IMAGES.find(a=>a.id===img.id);
-                   if(target){ if(context_type==='phase') target.phase_id=null; else if(context_type==='item') target.item_id=null; else if(context_type==='subitem') target.subitem_id=null; else { target.phase_id=target.item_id=target.subitem_id=null; } }
+                   if(target){ if(context_type==='phase') target.phase_id=null; else if(context_type==='feature') target.feature_id=null; else if(context_type==='item') target.item_id=null; else { target.phase_id=target.feature_id=target.item_id=null; } }
                    if(selected && context_type){
                       // reload thumbnails for current context
                       loadAssociatedThumbnails(context_type, parseInt(context_id));
@@ -1454,7 +1659,7 @@ function addLaneBands(){
             const id=parseInt(nodeLine.getAttribute('data-id'));
             document.querySelectorAll('.assoc-node.selected-node').forEach(n=> n.classList.remove('selected-node'));
             nodeLine.classList.add('selected-node');
-            if(['project','phase','item','subitem'].includes(type)) loadAssociatedThumbnails(type, id);
+            if(['project','phase','feature','item'].includes(type)) loadAssociatedThumbnails(type, id);
         });
         // --- Simple Timeline Initialization (client-side derived from gantt data) ---
         function initTimeline(){
@@ -1581,9 +1786,9 @@ function addLaneBands(){
                             const rect = g.querySelector('.bar');
                             const text = g.querySelector('text');
                             if(rect && text){
-                                if(rect.classList.contains('item-bar')){
+                                if(rect.classList.contains('feature-bar')){
                                     text.setAttribute('dx','12');
-                                } else if(rect.classList.contains('subitem-bar')){
+                                } else if(rect.classList.contains('item-bar')){
                                     text.setAttribute('dx','24');
                                 } else {
                                     text.setAttribute('dx','4');
@@ -1660,7 +1865,7 @@ function addLaneBands(){
                 const text = g.querySelector('text');
                 if(rect && text){
                     if(rect.classList.contains('item-bar')) text.setAttribute('dx','12');
-                    else if(rect.classList.contains('subitem-bar')) text.setAttribute('dx','24');
+                    
                     else text.setAttribute('dx','4');
                 }
             });
@@ -1707,17 +1912,17 @@ function addLaneBands(){
                             endpoint='/reorder_phase';
                             const projectBlock=dragEl.closest('.project-block'); parentId=projectBlock && projectBlock.querySelector('.assoc-node[data-type="project"]').dataset.id;
                             siblings=[...projectBlock.querySelectorAll('.node-line.assoc-node[data-type="phase"]')];
+                        } else if(type==='feature'){
+                            endpoint='/reorder_feature'; const phaseWrapper=findAncestorOfType(dragEl,'phase'); parentId=phaseWrapper? phaseWrapper.dataset.id:null; siblings=[...phaseWrapper.parentElement.nextElementSibling.querySelectorAll('.node-line.assoc-node[data-type="feature"]')];
                         } else if(type==='item'){
-                            endpoint='/reorder_item'; const phaseWrapper=findAncestorOfType(dragEl,'phase'); parentId=phaseWrapper? phaseWrapper.dataset.id:null; siblings=[...phaseWrapper.closest('[data-wrapper^="phase-"]').querySelectorAll('.node-line.assoc-node[data-type="item"]')];
-                        } else if(type==='subitem'){
-                            endpoint='/reorder_subitem'; const itemWrapper=findAncestorOfType(dragEl,'item'); parentId=itemWrapper? itemWrapper.dataset.id:null; siblings=[...itemWrapper.closest('[data-wrapper^="item-"]').querySelectorAll('.node-line.assoc-node[data-type="subitem"]')];
+                            endpoint='/reorder_item'; const featureWrapper=findAncestorOfType(dragEl,'feature'); parentId=featureWrapper? featureWrapper.dataset.id:null; siblings=[...featureWrapper.parentElement.nextElementSibling.querySelectorAll('.node-line.assoc-node[data-type="item"]')];
                         }
                         const newPos=siblings.findIndex(n=> n===dragEl);
                         if(endpoint && newPos>-1){
                             let payload={};
                             if(type==='phase') payload={phase_id:id, project_id:parentId, new_position:newPos};
-                            if(type==='item') payload={item_id:id, phase_id:parentId, new_position:newPos};
-                            if(type==='subitem') payload={subitem_id:id, item_id:parentId, new_position:newPos};
+                            if(type==='feature') payload={feature_id:id, phase_id:parentId, new_position:newPos};
+                            if(type==='item') payload={item_id:id, feature_id:parentId, new_position:newPos};
                             fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
                                 .then(r=>r.json()).then(resp=>{ if(resp.status!=='ok') console.warn('Reorder failed', resp); });
                         }
@@ -1757,7 +1962,7 @@ function addLaneBands(){
                                  const cp = criticalIds(); const orderMap={}; cp.forEach((id,i)=> orderMap[id]=i+1);
                                  document.querySelectorAll('.assoc-node .crit-badge').forEach(b=> b.remove());
                                  cp.forEach(id=>{
-                                     let type=null; if(id.startsWith('phase-')) type='phase'; else if(id.startsWith('item-')) type='item'; else if(id.startsWith('subitem-')) type='subitem';
+                                     let type=null; if(id.startsWith('phase-')) type='phase'; else if(id.startsWith('feature-')) type='feature'; else if(id.startsWith('item-')) type='item';
                                      if(!type) return; const rid=id.split('-')[1];
                                      const node=document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rid}"]`);
                                      if(node){
@@ -1778,7 +1983,7 @@ function addLaneBands(){
                          if(window._criticalFilterActive){
                              const cpSet = new Set(criticalIds());
                                         document.querySelectorAll('.assoc-node').forEach(n=>{
-                                 const type=n.dataset.type; const id=n.dataset.id; if(['phase','item','subitem'].includes(type)){
+                                 const type=n.dataset.type; const id=n.dataset.id; if(['phase','feature','item'].includes(type)){
                                                     const taskId=type+'-'+id; if(!cpSet.has(taskId)) n.style.opacity='0.15'; else n.style.opacity='1';
                                  }
                              });
@@ -1985,8 +2190,8 @@ function addLaneBands(){
                 box.style.position='absolute'; box.style.left='2px'; box.style.bottom='2px'; box.style.display='flex'; box.style.flexWrap='wrap'; box.style.gap='2px';
                 const makeBadge=(label,color)=>{ const b=document.createElement('span'); b.textContent=label; b.style.background=color; b.style.color='#fff'; b.style.fontSize='9px'; b.style.padding='2px 4px'; b.style.borderRadius='10px'; b.style.fontWeight='600'; b.style.boxShadow='0 1px 3px rgba(0,0,0,0.4)'; return b; };
                 meta.phases.forEach(p=> box.appendChild(makeBadge('P'+p.id,'#FF8200')));
-                meta.items.forEach(i=> box.appendChild(makeBadge('I'+i.id,'#4B4B4B')));
-                meta.subitems.forEach(s=> box.appendChild(makeBadge('S'+s.id,'#2f2f2f')));
+                meta.features.forEach(f=> box.appendChild(makeBadge('F'+f.id,'#4B4B4B')));
+                meta.items.forEach(i=> box.appendChild(makeBadge('I'+i.id,'#2f2f2f')));
                 const holder=thumb.parentElement; holder.style.position='relative'; holder.appendChild(box);
             }
             // Observe thumbnail additions
@@ -2041,15 +2246,15 @@ function addLaneBands(){
                     </select><br>
                     <button type='submit'>Save</button>
                 </form>`;
-            } else if(type === 'subitem') {
-                formHtml = `<form method='post' action='/edit_subitem/${id}'>
-                    <h3>Edit Sub-Item</h3>
-                    <input type='text' name='subitem-title' value='${title}' required><br>
-                    <input type='date' name='subitem-start' value='${start}' required><br>
-                    <input type='number' name='subitem-duration' value='${duration}' required><br>
-                    <input type='text' name='subitem-dependencies' value='${dependencies||''}'><br>
-                    <label><input type='checkbox' name='subitem-milestone' ${milestone==='true'?'checked':''}> Milestone</label><br>
-                    <select name='subitem-type'>
+            } else if(type === 'feature') {
+                formHtml = `<form method='post' action='/edit_feature/${id}'>
+                    <h3>Edit Feature</h3>
+                    <input type='text' name='feature-title' value='${title}' required><br>
+                    <input type='date' name='feature-start' value='${start}' required><br>
+                    <input type='number' name='feature-duration' value='${duration}' required><br>
+                    <input type='text' name='feature-dependencies' value='${dependencies||''}'><br>
+                    <label><input type='checkbox' name='feature-milestone' ${milestone==='true'?'checked':''}> Milestone</label><br>
+                    <select name='feature-type'>
                         <option value='internal' ${internal_external==='internal'?'selected':''}>Internal</option>
                         <option value='external' ${internal_external==='external'?'selected':''}>External</option>
                     </select><br>

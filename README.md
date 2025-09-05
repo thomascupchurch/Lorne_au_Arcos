@@ -7,13 +7,13 @@ Modular Flask application providing project planning (Gantt, calendar, hierarchy
 - `admin`: user administration
 - `utility`: health & active user sessions
 - `media`: image/PDF uploads and multi-association to project parts
-- `planning`: projects, phases, items, subitems, drafts, dependencies, critical path, exports
+- `planning`: projects, phases, features, items, drafts, dependencies, critical path, exports
 
 ## Key Features
-- Hierarchical structure: Project → Phase → Item → SubItem
+- Hierarchical structure: Project → Phase → Feature → Item
 - Draft holding area for title-only parts before promotion
-- Dependencies (item/subitem) with naive critical path computation
-- Drag-and-drop reordering of phases/items/subitems
+- Dependencies (feature/item) with naive critical path computation
+- Drag-and-drop reordering of phases/features/items
 - Drag date adjustment with cascade to dependents
 - Calendar (ICS export) & Gantt (PNG export) views
 - Critical path filtering (persisted in session)
@@ -47,7 +47,7 @@ pytest -q
 ```
 
 ## Implementation Notes
-- Critical path: simplified longest-duration path across dependencies (items/subitems). No cycle detection yet.
+- Critical path: simplified longest-duration path across dependencies (features/items). No cycle detection yet.
 - Drag cascade: adjusts dependent starts to follow latest predecessor end.
 - Multi-association images via three M2M tables.
 - Session state: `selected_project_id`, `critical_filter`.
@@ -55,7 +55,7 @@ pytest -q
 
 ## Roadmap
 - Dependency validation & cycle detection
-- Richer draft promotion (items, subitems)
+- Richer draft promotion (features, items)
 - Additional export formats (PDF, Excel)
 - Reorder & cascade tests (expand coverage)
 - Per-project authorization controls

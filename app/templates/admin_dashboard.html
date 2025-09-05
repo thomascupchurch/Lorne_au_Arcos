@@ -7,9 +7,9 @@
 <body class="p-3">
     <h1 class="mb-4">Admin Dashboard</h1>
     <nav class="mb-3">
-        <a class="btn btn-sm btn-secondary" href="{{ url_for('main.index') }}">Home</a>
-        <a class="btn btn-sm btn-primary" href="{{ url_for('main.admin_users') }}">Manage Users</a>
-        <a class="btn btn-sm btn-outline-danger" href="{{ url_for('main.logout') }}">Logout</a>
+        <a class="btn btn-sm btn-secondary" href="{{ url_for('planning.index') }}">Home</a>
+        <a class="btn btn-sm btn-primary" href="{{ url_for('admin.users') }}">Manage Users</a>
+        <a class="btn btn-sm btn-outline-danger" href="{{ url_for('auth.logout') }}">Logout</a>
     </nav>
 
     <div class="row g-3 mb-4">
@@ -40,16 +40,16 @@
         <div class="col-6 col-md-4 col-lg-2">
             <div class="card text-center">
                 <div class="card-body">
-                    <h6 class="text-uppercase text-muted mb-1">Items</h6>
-                    <div class="fs-4">{{ stats.items }}</div>
+                    <h6 class="text-uppercase text-muted mb-1">Features</h6>
+                    <div class="fs-4">{{ stats.features }}</div>
                 </div>
             </div>
         </div>
         <div class="col-6 col-md-4 col-lg-2">
             <div class="card text-center">
                 <div class="card-body">
-                    <h6 class="text-uppercase text-muted mb-1">SubItems</h6>
-                    <div class="fs-4">{{ stats.subitems }}</div>
+                    <h6 class="text-uppercase text-muted mb-1">Items</h6>
+                    <div class="fs-4">{{ stats.items }}</div>
                 </div>
             </div>
         </div>

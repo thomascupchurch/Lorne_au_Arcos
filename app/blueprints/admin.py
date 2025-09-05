@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import current_user, login_required
 from werkzeug.security import generate_password_hash
-from app.models import db, User, Project, Phase, Item, SubItem, Image
+from app.models import db, User, Project, Phase, Feature, Item, Image
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -20,8 +20,8 @@ def dashboard():
         'users': User.query.count(),
         'projects': Project.query.count(),
         'phases': Phase.query.count(),
-        'items': Item.query.count(),
-        'subitems': SubItem.query.count(),
+    'features': Feature.query.count(),
+    'items': Item.query.count(),
         'images': Image.query.count()
     }
     recent_users = User.query.order_by(User.id.desc()).limit(5).all()

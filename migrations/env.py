@@ -1,5 +1,5 @@
 from __future__ import with_statement
-import sys
+import sys, os
 from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
@@ -15,8 +15,15 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+# Ensure project root on sys.path so 'app' package is importable when running Alembic from anywhere
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 # Provide access to metadata from flask app models
 from app import create_app
+# Indicate to the Flask app factory that we're running under Alembic migrations
+os.environ["ALEMBIC_RUNNING"] = "1"
 flask_app = create_app()
 with flask_app.app_context():
     from app.models import db

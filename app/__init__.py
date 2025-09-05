@@ -58,8 +58,11 @@ def create_app():
         # Optional: you could print/log creation, but avoid noisy stdout in production.
 
     with app.app_context():
-        # For first-run (no migrations run yet) allow create_all, but prefer Alembic afterwards.
-        if not os.path.exists(os.path.join(app.root_path, '..', 'app.db')):
-            db.create_all()
+        # Avoid create_all when Alembic is managing schema (prevents duplicate tables during migrations)
+        alembic_running = os.getenv('ALEMBIC_RUNNING') == '1'
+        if not alembic_running:
+            # For first-run (no migrations run yet) allow create_all, but prefer Alembic afterwards.
+            if not os.path.exists(os.path.join(app.root_path, '..', 'app.db')):
+                db.create_all()
         ensure_admin()
     return app

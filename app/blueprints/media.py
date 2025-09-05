@@ -1,7 +1,7 @@
 import os, io, zipfile, csv
 from flask import Blueprint, request, redirect, url_for, flash, send_from_directory, current_app, send_file
 from flask_login import login_required
-from app.models import db, Image, Phase, Item, SubItem, Project
+from app.models import db, Image, Phase, Feature, Item, Project
 
 media_bp = Blueprint('media', __name__, url_prefix='/media')
 
@@ -63,14 +63,14 @@ def associate_image():
             ph=Phase.query.get(int(target_id));
             if not ph: return {'error':'phase not found'},404
             if ph not in img.phases: img.phases.append(ph); added=True
+        elif target_type=='feature':
+            ft=Feature.query.get(int(target_id));
+            if not ft: return {'error':'feature not found'},404
+            if ft not in img.features: img.features.append(ft); added=True
         elif target_type=='item':
             it=Item.query.get(int(target_id));
             if not it: return {'error':'item not found'},404
             if it not in img.items: img.items.append(it); added=True
-        elif target_type=='subitem':
-            si=SubItem.query.get(int(target_id));
-            if not si: return {'error':'subitem not found'},404
-            if si not in img.subitems: img.subitems.append(si); added=True
         else:
             return {'error':'bad target_type'},400
         db.session.commit(); return {'status':'ok','image_id':img.id,'target_type':target_type,'target_id':target_id,'added':added}
@@ -90,15 +90,15 @@ def unlink_image():
         if context_type=='phase' and context_id:
             ph=Phase.query.get(int(context_id));
             if ph and ph in img.phases: img.phases.remove(ph); changed=True
+        elif context_type=='feature' and context_id:
+            ft=Feature.query.get(int(context_id));
+            if ft and ft in img.features: img.features.remove(ft); changed=True
         elif context_type=='item' and context_id:
             it=Item.query.get(int(context_id));
             if it and it in img.items: img.items.remove(it); changed=True
-        elif context_type=='subitem' and context_id:
-            si=SubItem.query.get(int(context_id));
-            if si and si in img.subitems: img.subitems.remove(si); changed=True
         elif not context_type:
-            if img.phases or img.items or img.subitems:
-                img.phases.clear(); img.items.clear(); img.subitems.clear(); changed=True
+            if img.phases or img.features or img.items:
+                img.phases.clear(); img.features.clear(); img.items.clear(); changed=True
         if changed: db.session.commit()
         return {'status':'ok','image_id':img.id,'cleared':changed}
     except Exception:
@@ -109,13 +109,13 @@ def unlink_image():
 def image_links(image_id):
     img = Image.query.get_or_404(image_id)
     def simple_phase(p): return {'id':p.id,'title':p.title,'type':'phase'}
+    def simple_feature(f): return {'id':f.id,'title':f.title,'type':'feature'}
     def simple_item(i): return {'id':i.id,'title':i.title,'type':'item'}
-    def simple_sub(s): return {'id':s.id,'title':s.title,'type':'subitem'}
     return {
         'image_id': img.id,
         'filename': img.filename,
         'project_id': img.project_id,
         'phases': [simple_phase(p) for p in img.phases],
-        'items': [simple_item(i) for i in img.items],
-        'subitems': [simple_sub(s) for s in img.subitems]
+        'features': [simple_feature(f) for f in img.features],
+        'items': [simple_item(i) for i in img.items]
     }

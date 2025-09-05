@@ -21,7 +21,7 @@ def upgrade():
             sa.Column('id', sa.Integer(), primary_key=True),
             sa.Column('user_id', sa.Integer(), sa.ForeignKey('user.id'), nullable=False),
             sa.Column('session_uuid', sa.String(length=64), nullable=False, unique=True),
-            sa.Column('last_seen', sa.DateTime(), nullable=True, index=True)
+            sa.Column('last_seen', sa.DateTime(), nullable=True)
         )
         op.create_index('ix_user_session_last_seen', 'user_session', ['last_seen'])
     else:

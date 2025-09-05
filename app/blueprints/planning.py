@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, session, redirect, url_for, request, flash, send_file, current_app
 from flask_login import login_required, current_user
-from app.models import db, Project, Phase, Item, SubItem, Image, DraftPart, UserSession
+from app.models import db, Project, Phase, Feature, Item, Image, DraftPart, UserSession
 import os, json, io, csv, zipfile, re
 from datetime import datetime, timedelta, date
 import uuid as _uuid
@@ -11,8 +11,8 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 
 # -------------------- Core Scheduling Utilities (Phase 1 migration) --------------------
 def _parse_dep_ids(raw: str):
-    """Parse dependency token list; accept raw numeric or prefixed like item-3, subitem-5, phase-2.
-    Returns list of integer IDs (we treat IDs as global-ish across items/subitems for naive CP calc).
+    """Parse dependency token list; accept raw numeric or prefixed like item-3, feature-5, phase-2.
+    Returns list of integer IDs (IDs are treated as global-ish across features/items for naive CP calc).
     """
     if not raw:
         return []
@@ -38,13 +38,11 @@ def _task_window(obj):
     end = obj.start_date + timedelta(days=getattr(obj, 'duration', 0))
     return start, end
 
-def compute_critical_path(phases, items, subitems):
-    """Compute a naive critical path across phases/items/subitems.
+def compute_critical_path(phases, features, items):
+    """Compute a naive critical path across phases/features/items.
 
-    Approach: Treat each phase/item/subitem as a node. Use durations and dependencies
-    (where present on items / subitems) to compute longest distance ending at each node.
-    Returns list of string IDs (e.g., 'phase-1','item-2','subitem-5').
-    This is a simplified reimplementation adequate for highlighting.
+    Treat each phase/feature/item as a node. Dependencies only on features/items.
+    Returns list like ['phase-1','feature-2','item-5'].
     """
     # Build adjacency via dependency references; phases currently have no explicit dependencies.
     nodes = []
@@ -64,13 +62,13 @@ def compute_critical_path(phases, items, subitems):
         id_map[sid] = nodes[-1]
     for ph in phases:
         add_node('phase', ph, [])
+    for ft in features:
+        add_node('feature', ft, _parse_dep_ids(ft.dependencies))
     for it in items:
         add_node('item', it, _parse_dep_ids(it.dependencies))
-    for su in subitems:
-        add_node('subitem', su, _parse_dep_ids(su.dependencies))
 
     # DP over nodes: we need quick lookup by numeric id irrespective of type, so we flatten
-    # and allow dependencies to reference any id (item/subitem IDs). We'll map int IDs to possible nodes.
+    # and allow dependencies to reference any id (feature/item IDs). We'll map int IDs to possible nodes.
     numeric_index = {}
     for n in nodes:
         base_obj = n['obj']
@@ -133,9 +131,9 @@ def set_project():
 @planning_bp.route('/create_part', methods=['POST'])
 @login_required
 def create_part():
-    """Unified create endpoint for phase/item/subitem (partial feature set).
+    """Unified create endpoint for phase/feature/item.
 
-    Supports dependency field for items/subitems (comma numeric IDs). Returns JSON if
+    Supports dependency field for feature/item (comma numeric IDs). Returns JSON if
     X-Requested-With header present (AJAX), else redirects with flash.
     """
     ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -167,24 +165,24 @@ def create_part():
             flash(msg); return redirect(url_for('planning.index'))
         created = Phase(title=title, start_date=start_date, duration=duration,
                         project_id=project_id, internal_external=internal_external)
-    elif ptype == 'item':
+    elif ptype == 'feature':
         phase_id = request.form.get('phase-id') or request.form.get('parent-phase-id')
         if not (phase_id and start_date is not None):
-            msg='Phase and start date required for item'
+            msg='Phase and start date required for feature'
+            if ajax: return {'error':msg},400
+            flash(msg); return redirect(url_for('planning.index'))
+        created = Feature(title=title, start_date=start_date, duration=duration,
+                          phase_id=int(phase_id), internal_external=internal_external,
+                          dependencies=dependencies_raw or None)
+    elif ptype == 'item':
+        feature_id = request.form.get('feature-id') or request.form.get('parent-feature-id') or request.form.get('item-id')
+        if not (feature_id and start_date is not None):
+            msg='Feature and start date required for item'
             if ajax: return {'error':msg},400
             flash(msg); return redirect(url_for('planning.index'))
         created = Item(title=title, start_date=start_date, duration=duration,
-                        phase_id=int(phase_id), internal_external=internal_external,
+                        feature_id=int(feature_id), internal_external=internal_external,
                         dependencies=dependencies_raw or None)
-    elif ptype == 'subitem':
-        item_id = request.form.get('item-id') or request.form.get('parent-item-id')
-        if not (item_id and start_date is not None):
-            msg='Item and start date required for subitem'
-            if ajax: return {'error':msg},400
-            flash(msg); return redirect(url_for('planning.index'))
-        created = SubItem(title=title, start_date=start_date, duration=duration,
-                          item_id=int(item_id), internal_external=internal_external,
-                          dependencies=dependencies_raw or None)
     else:
         msg='Unsupported part type'
         if ajax: return {'error':msg},400
@@ -194,9 +192,9 @@ def create_part():
     db.session.commit()
     # Recompute critical path (rough) for response data
     phases = Phase.query.filter_by(project_id=project_id).all() if project_id else Phase.query.all()
-    items = Item.query.join(Phase).filter(Phase.project_id==project_id).all() if project_id else Item.query.all()
-    subs = SubItem.query.join(Item).join(Phase).filter(Phase.project_id==project_id).all() if project_id else SubItem.query.all()
-    critical_ids = compute_critical_path(phases, items, subs)
+    features = Feature.query.join(Phase).filter(Phase.project_id==project_id).all() if project_id else Feature.query.all()
+    leafs = Item.query.join(Feature).join(Phase).filter(Phase.project_id==project_id).all() if project_id else Item.query.all()
+    critical_ids = compute_critical_path(phases, features, leafs)
     resp_created = {
         'id': created.id,
         'type': ptype,
@@ -226,25 +224,29 @@ def create_part():
 @planning_bp.route('/create_draft_part', methods=['POST'])
 @login_required
 def create_draft_part():
-    """Create a lightweight draft part (title + type) for later promotion."""
+    """Create a lightweight draft part. Type is optional in holding area.
+
+    If omitted, part_type is stored as NULL and can be assigned during promotion.
+    """
     title = request.form.get('draft-title','').strip()
-    ptype = request.form.get('draft-type')
+    ptype = request.form.get('draft-type') or None
     internal_external = request.form.get('draft-internal-external','internal')
     project_id = session.get('selected_project_id')
-    if not (title and ptype and project_id):
+    if not (title and project_id):
         return {'error':'missing fields'}, 400
     d = DraftPart(title=title, part_type=ptype, internal_external=internal_external, project_id=project_id)
     db.session.add(d)
     db.session.commit()
     return {'status':'ok','draft':{
         'id': d.id, 'title': d.title, 'type': d.part_type,
-        'internal_external': d.internal_external, 'project_id': d.project_id
+        'internal_external': d.internal_external, 'project_id': d.project_id,
+        'needs_type': d.part_type is None
     }}
 
 @planning_bp.route('/promote_draft/<int:draft_id>', methods=['POST'])
 @login_required
 def promote_draft(draft_id):
-    """Promote a draft into a concrete phase/item/subitem (phase only for now)."""
+    """Promote a draft into a concrete part (phase only for now)."""
     draft = DraftPart.query.get_or_404(draft_id)
     if draft.part_type != 'phase':
         return {'error':'Only phase promotion implemented in partial migration'}, 400
@@ -265,6 +267,94 @@ def promote_draft(draft_id):
     db.session.delete(draft)
     db.session.commit()
     return {'status':'ok','created':{'id':ph.id,'type':'phase','title':ph.title}, 'removed_draft_id':draft_id}
+
+@planning_bp.route('/promote_draft_auto', methods=['POST'])
+@login_required
+def promote_draft_auto():
+    """Promote a draft with an inferred type & parent context via drag/drop.
+
+    Expected JSON:
+    { draft_id, inferred_type (phase|feature|item), start, duration, phase_id?, feature_id? }
+    If draft.part_type is NULL we assign inferred_type. If it is set and differs, we return error.
+    """
+    data = request.get_json() or {}
+    draft_id = data.get('draft_id'); inferred = data.get('inferred_type')
+    start_raw = data.get('start'); duration = data.get('duration') or 1
+    if not (draft_id and inferred and start_raw):
+        return {'error':'missing fields'}, 400
+    draft = DraftPart.query.get_or_404(int(draft_id))
+    if draft.part_type and draft.part_type != inferred:
+        return {'error':'draft type conflict'}, 400
+    if not draft.part_type:
+        draft.part_type = inferred
+    try:
+        start_date = datetime.strptime(start_raw, '%Y-%m-%d').date()
+    except Exception:
+        return {'error':'invalid start'}, 400
+    try:
+        duration = int(duration)
+    except ValueError:
+        duration = 1
+    if duration < 1: duration = 1
+    created = None
+    project_id = draft.project_id or session.get('selected_project_id')
+    if inferred == 'phase':
+        if not project_id:
+            return {'error':'project context required'}, 400
+        created = Phase(title=draft.title, start_date=start_date, duration=duration,
+                         project_id=project_id, internal_external=draft.internal_external)
+    elif inferred == 'feature':
+        phase_id = data.get('phase_id')
+        if not phase_id:
+            return {'error':'phase_id required'}, 400
+        created = Feature(title=draft.title, start_date=start_date, duration=duration,
+                          phase_id=int(phase_id), internal_external=draft.internal_external)
+    elif inferred == 'item':
+        feature_id = data.get('feature_id')
+        item_id = data.get('item_id')
+        resolved_feature_id = None
+        if feature_id:
+            try:
+                resolved_feature_id = int(feature_id)
+            except Exception:
+                resolved_feature_id = None
+        if not resolved_feature_id and item_id:
+            try:
+                it_ref = Item.query.get(int(item_id))
+                if it_ref:
+                    resolved_feature_id = it_ref.feature_id
+            except Exception:
+                resolved_feature_id = None
+        if not resolved_feature_id:
+            return {'error':'feature_id required'}, 400
+        created = Item(title=draft.title, start_date=start_date, duration=duration,
+                        feature_id=resolved_feature_id, internal_external=draft.internal_external)
+    else:
+        return {'error':'unsupported inferred type'}, 400
+    db.session.add(created)
+    db.session.delete(draft)
+    db.session.commit()
+    # critical path recompute limited to project scope when possible
+    phases = Phase.query.filter_by(project_id=project_id).all() if project_id else Phase.query.all()
+    features = Feature.query.join(Phase).filter(Phase.project_id==project_id).all() if project_id else Feature.query.all()
+    leafs = Item.query.join(Feature).join(Phase).filter(Phase.project_id==project_id).all() if project_id else Item.query.all()
+    critical_ids = compute_critical_path(phases, features, leafs)
+    end_date = (created.start_date + timedelta(days=getattr(created,'duration',0))).strftime('%Y-%m-%d') if created.start_date else None
+    custom_cls = f"{inferred}-bar"
+    if getattr(created,'internal_external','internal') == 'external':
+        custom_cls += ' external-bar'
+    task = {
+        'id': f'{inferred}-{created.id}',
+        'name': f'{inferred.capitalize()}: {created.title}',
+        'start': created.start_date.strftime('%Y-%m-%d'),
+        'end': end_date,
+        'progress': 0,
+        'custom_class': custom_cls
+    }
+    return {'status':'ok','created':{
+                'id': created.id, 'type': inferred, 'title': created.title,
+                'start': task['start'], 'duration': getattr(created,'duration',0)
+            }, 'task': task, 'critical_path': critical_ids, 'removed_draft_id': draft_id}
 
 # -------------------- Reorder Endpoints (Phase 2 migration) --------------------
 def _apply_new_positions(model, siblings, new_position):
@@ -291,33 +381,33 @@ def reorder_phase():
     db.session.commit()
     return {'status':'ok'}
 
+@planning_bp.route('/reorder_feature', methods=['POST'])
+@login_required
+def reorder_feature():
+    data = request.get_json() or {}
+    feature_id=data.get('feature_id'); phase_id=data.get('phase_id'); new_pos=data.get('new_position')
+    if not all(v is not None for v in (feature_id, phase_id, new_pos)):
+        return {'error':'missing fields'},400
+    ft = Feature.query.get(feature_id)
+    if not ft or ft.phase_id != int(phase_id):
+        return {'error':'feature not found'},404
+    sibs = Feature.query.filter_by(phase_id=phase_id).order_by(Feature.sort_order.asc(), Feature.id.asc()).all()
+    _apply_new_positions(ft, sibs, int(new_pos))
+    db.session.commit()
+    return {'status':'ok'}
+
 @planning_bp.route('/reorder_item', methods=['POST'])
 @login_required
 def reorder_item():
     data = request.get_json() or {}
-    item_id=data.get('item_id'); phase_id=data.get('phase_id'); new_pos=data.get('new_position')
-    if not all(v is not None for v in (item_id, phase_id, new_pos)):
+    item_id=data.get('item_id'); feature_id=data.get('feature_id'); new_pos=data.get('new_position')
+    if not all(v is not None for v in (item_id, feature_id, new_pos)):
         return {'error':'missing fields'},400
     it = Item.query.get(item_id)
-    if not it or it.phase_id != int(phase_id):
+    if not it or it.feature_id != int(feature_id):
         return {'error':'item not found'},404
-    sibs = Item.query.filter_by(phase_id=phase_id).order_by(Item.sort_order.asc(), Item.id.asc()).all()
+    sibs = Item.query.filter_by(feature_id=feature_id).order_by(Item.sort_order.asc(), Item.id.asc()).all()
     _apply_new_positions(it, sibs, int(new_pos))
-    db.session.commit()
-    return {'status':'ok'}
-
-@planning_bp.route('/reorder_subitem', methods=['POST'])
-@login_required
-def reorder_subitem():
-    data = request.get_json() or {}
-    subitem_id=data.get('subitem_id'); item_id=data.get('item_id'); new_pos=data.get('new_position')
-    if not all(v is not None for v in (subitem_id, item_id, new_pos)):
-        return {'error':'missing fields'},400
-    si = SubItem.query.get(subitem_id)
-    if not si or si.item_id != int(item_id):
-        return {'error':'subitem not found'},404
-    sibs = SubItem.query.filter_by(item_id=item_id).order_by(SubItem.sort_order.asc(), SubItem.id.asc()).all()
-    _apply_new_positions(si, sibs, int(new_pos))
     db.session.commit()
     return {'status':'ok'}
 
@@ -339,9 +429,9 @@ def export_critical_csv():
     # Minimal CSV export with current critical path IDs
     project_id = session.get('selected_project_id')
     phases = Phase.query.filter_by(project_id=project_id).all() if project_id else Phase.query.all()
-    items = Item.query.join(Phase).filter(Phase.project_id==project_id).all() if project_id else Item.query.all()
-    subs = SubItem.query.join(Item).join(Phase).filter(Phase.project_id==project_id).all() if project_id else SubItem.query.all()
-    critical_ids = compute_critical_path(phases, items, subs)
+    features = Feature.query.join(Phase).filter(Phase.project_id==project_id).all() if project_id else Feature.query.all()
+    leafs = Item.query.join(Feature).join(Phase).filter(Phase.project_id==project_id).all() if project_id else Item.query.all()
+    critical_ids = compute_critical_path(phases, features, leafs)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['order','id'])
@@ -379,12 +469,12 @@ def edit_project(project_id):
 @login_required
 def delete_project(project_id):
     proj = Project.query.get_or_404(project_id)
-    # Naive cascade: delete phases -> items -> subitems manually
+    # Naive cascade: delete phases -> features -> items manually
     for ph in proj.phases:
-        for it in ph.items:
-            for su in it.subitems:
-                db.session.delete(su)
-            db.session.delete(it)
+        for ft in ph.features:
+            for it in ft.items:
+                db.session.delete(it)
+            db.session.delete(ft)
         db.session.delete(ph)
     db.session.delete(proj)
     db.session.commit()
@@ -416,15 +506,46 @@ def edit_phase(phase_id):
 @login_required
 def delete_phase(phase_id):
     ph = Phase.query.get_or_404(phase_id)
-    for it in ph.items:
-        for su in it.subitems:
-            db.session.delete(su)
-        db.session.delete(it)
+    for ft in ph.features:
+        for it in ft.items:
+            db.session.delete(it)
+        db.session.delete(ft)
     db.session.delete(ph)
     db.session.commit()
     return redirect(url_for('planning.index'))
 
-# Item CRUD
+# Feature CRUD
+@planning_bp.route('/edit_feature/<int:feature_id>', methods=['POST'])
+@login_required
+def edit_feature(feature_id):
+    ft = Feature.query.get_or_404(feature_id)
+    ft.title = (request.form.get('feature-title') or ft.title).strip()
+    try:
+        ft.start_date = datetime.strptime(request.form.get('feature-start'), '%Y-%m-%d').date()
+    except Exception:
+        pass
+    try:
+        ft.duration = int(request.form.get('feature-duration') or ft.duration)
+    except ValueError:
+        pass
+    ft.dependencies = request.form.get('feature-dependencies') or ft.dependencies
+    ft.is_milestone = bool(request.form.get('feature-milestone'))
+    ft.internal_external = request.form.get('feature-type') or ft.internal_external
+    ft.notes = request.form.get('feature-notes') or ft.notes
+    db.session.commit()
+    return redirect(url_for('planning.index'))
+
+@planning_bp.route('/delete_feature/<int:feature_id>', methods=['POST'])
+@login_required
+def delete_feature(feature_id):
+    ft = Feature.query.get_or_404(feature_id)
+    for it in ft.items:
+        db.session.delete(it)
+    db.session.delete(ft)
+    db.session.commit()
+    return redirect(url_for('planning.index'))
+
+# Item (leaf) CRUD
 @planning_bp.route('/edit_item/<int:item_id>', methods=['POST'])
 @login_required
 def edit_item(item_id):
@@ -449,38 +570,7 @@ def edit_item(item_id):
 @login_required
 def delete_item(item_id):
     it = Item.query.get_or_404(item_id)
-    for su in it.subitems:
-        db.session.delete(su)
     db.session.delete(it)
-    db.session.commit()
-    return redirect(url_for('planning.index'))
-
-# SubItem CRUD
-@planning_bp.route('/edit_subitem/<int:subitem_id>', methods=['POST'])
-@login_required
-def edit_subitem(subitem_id):
-    su = SubItem.query.get_or_404(subitem_id)
-    su.title = (request.form.get('subitem-title') or su.title).strip()
-    try:
-        su.start_date = datetime.strptime(request.form.get('subitem-start'), '%Y-%m-%d').date()
-    except Exception:
-        pass
-    try:
-        su.duration = int(request.form.get('subitem-duration') or su.duration)
-    except ValueError:
-        pass
-    su.dependencies = request.form.get('subitem-dependencies') or su.dependencies
-    su.is_milestone = bool(request.form.get('subitem-milestone'))
-    su.internal_external = request.form.get('subitem-type') or su.internal_external
-    su.notes = request.form.get('subitem-notes') or su.notes
-    db.session.commit()
-    return redirect(url_for('planning.index'))
-
-@planning_bp.route('/delete_subitem/<int:subitem_id>', methods=['POST'])
-@login_required
-def delete_subitem(subitem_id):
-    su = SubItem.query.get_or_404(subitem_id)
-    db.session.delete(su)
     db.session.commit()
     return redirect(url_for('planning.index'))
 
@@ -488,17 +578,17 @@ def delete_subitem(subitem_id):
 def _iter_project_parts(project_id=None):
     if project_id:
         phases = Phase.query.filter_by(project_id=project_id).all()
-        items = Item.query.join(Phase).filter(Phase.project_id==project_id).all()
-        subs = SubItem.query.join(Item).join(Phase).filter(Phase.project_id==project_id).all()
+        features = Feature.query.join(Phase).filter(Phase.project_id==project_id).all()
+        items = Item.query.join(Feature).join(Phase).filter(Phase.project_id==project_id).all()
     else:
-        phases, items, subs = Phase.query.all(), Item.query.all(), SubItem.query.all()
-    return phases, items, subs
+        phases, features, items = Phase.query.all(), Feature.query.all(), Item.query.all()
+    return phases, features, items
 
 @planning_bp.route('/export_calendar_ics')
 @login_required
 def export_calendar_ics():
     project_id = session.get('selected_project_id')
-    phases, items, subs = _iter_project_parts(project_id)
+    phases, features, items = _iter_project_parts(project_id)
     lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//LSI Graphics Planning//EN"]
     def add_event(prefix, obj):
         if not obj.start_date:
@@ -511,8 +601,8 @@ def export_calendar_ics():
         title = f"{prefix.capitalize()}: {obj.title}".replace('\n',' ')
         lines.extend(["BEGIN:VEVENT", f"UID:{uid}", f"DTSTAMP:{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}", f"DTSTART;VALUE=DATE:{start}", f"DTEND;VALUE=DATE:{end}", f"SUMMARY:{title}", "END:VEVENT"])
     for ph in phases: add_event('phase', ph)
+    for ft in features: add_event('feature', ft)
     for it in items: add_event('item', it)
-    for su in subs: add_event('subitem', su)
     lines.append('END:VCALENDAR')
     data = '\r\n'.join(lines).encode('utf-8')
     bio = io.BytesIO(data); bio.seek(0)
@@ -525,14 +615,14 @@ def export_project(project_id):
     proj = Project.query.get_or_404(project_id)
     payload = {
         'project': {'id': proj.id, 'title': proj.title},
-        'phases': [], 'items': [], 'subitems': []
+        'phases': [], 'features': [], 'items': []
     }
     for ph in proj.phases:
         payload['phases'].append({'id': ph.id, 'title': ph.title, 'start': ph.start_date.isoformat(), 'duration': ph.duration, 'notes': ph.notes})
-        for it in ph.items:
-            payload['items'].append({'id': it.id, 'title': it.title, 'start': it.start_date.isoformat(), 'duration': it.duration, 'phase_id': ph.id, 'deps': it.dependencies, 'notes': it.notes})
-            for su in it.subitems:
-                payload['subitems'].append({'id': su.id, 'title': su.title, 'start': su.start_date.isoformat(), 'duration': su.duration, 'item_id': it.id, 'deps': su.dependencies, 'notes': su.notes})
+        for ft in ph.features:
+            payload['features'].append({'id': ft.id, 'title': ft.title, 'start': ft.start_date.isoformat(), 'duration': ft.duration, 'phase_id': ph.id, 'deps': ft.dependencies, 'notes': ft.notes})
+            for it in ft.items:
+                payload['items'].append({'id': it.id, 'title': it.title, 'start': it.start_date.isoformat(), 'duration': it.duration, 'feature_id': ft.id, 'deps': it.dependencies, 'notes': it.notes})
     mem = io.BytesIO()
     with zipfile.ZipFile(mem, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr('project.json', json.dumps(payload, indent=2))
@@ -540,28 +630,28 @@ def export_project(project_id):
     return send_file(mem, mimetype='application/zip', as_attachment=True, download_name=f'project_{proj.id}.zip')
 
 # -------------------- Update (Drag) Endpoint with Cascade --------------------
-def _build_dependency_graph(items, subs):
-    # Build mapping: id -> list of dependents (integers). Dependents across items+subitems.
+def _build_dependency_graph(features, items):
+    # Build mapping: id -> list of dependents across features+items by numeric IDs
     dependents = {}
-    for collection in (items, subs):
+    for collection in (features, items):
         for obj in collection:
             deps = _parse_dep_ids(obj.dependencies or '')
             for d in deps:
                 dependents.setdefault(d, set()).add(obj.id)
     return dependents
 
-def _index_objects(phases, items, subs):
+def _index_objects(phases, features, items):
     by_numeric = {}
-    for o in items:
-        by_numeric[o.id] = ('item', o)
-    for s in subs:
-        by_numeric[s.id] = ('subitem', s)
+    for f in features:
+        by_numeric[f.id] = ('feature', f)
+    for i in items:
+        by_numeric[i.id] = ('item', i)
     return by_numeric
 
 def _recompute_critical(project_id=None):
-    phases, items, subs = _iter_project_parts(project_id)
-    cp = compute_critical_path(phases, items, subs)
-    return cp, phases, items, subs
+    phases, features, items = _iter_project_parts(project_id)
+    cp = compute_critical_path(phases, features, items)
+    return cp, phases, features, items
 
 @planning_bp.route('/update_gantt_task', methods=['POST'])
 @login_required
@@ -572,14 +662,14 @@ def update_gantt_task():
     end_str = data.get('end')
     if not sid or not start_str:
         return {'error':'missing fields'}, 400
-    m = re.match(r'^(phase|item|subitem)-(\d+)$', sid)
+    m = re.match(r'^(phase|feature|item)-(\d+)$', sid)
     if not m:
         return {'error':'invalid id'},400
     kind, num = m.group(1), int(m.group(2))
     obj = None
     if kind=='phase': obj = Phase.query.get(num)
-    elif kind=='item': obj = Item.query.get(num)
-    else: obj = SubItem.query.get(num)
+    elif kind=='feature': obj = Feature.query.get(num)
+    else: obj = Item.query.get(num)
     if not obj:
         return {'error':'not found'},404
     try:
@@ -599,15 +689,15 @@ def update_gantt_task():
         obj.duration = duration
     db.session.commit()
 
-    # Cascade (items/subitems only) recompute earliest starts for dependents
+    # Cascade (features/items only) recompute earliest starts for dependents
     project_id = session.get('selected_project_id')
-    cp, phases, items, subs = _recompute_critical(project_id)
-    dependents_map = _build_dependency_graph(items, subs)
-    index_map = _index_objects(phases, items, subs)
+    cp, phases, features, items = _recompute_critical(project_id)
+    dependents_map = _build_dependency_graph(features, items)
+    index_map = _index_objects(phases, features, items)
     adjustments = []
-    # BFS from moved obj numeric id if item/subitem
+    # BFS from moved obj numeric id if feature/item
     start_numeric_ids = []
-    if kind in ('item','subitem'):
+    if kind in ('feature','item'):
         start_numeric_ids.append(obj.id)
     visited = set()
     while start_numeric_ids:
@@ -653,14 +743,14 @@ def index():
     if selected_project_id:
         phases = (Phase.query.filter_by(project_id=selected_project_id)
                   .order_by(Phase.sort_order.asc(), Phase.id.asc()).all())
-        items = Item.query.join(Phase).filter(Phase.project_id == selected_project_id).all()
-        subitems = SubItem.query.join(Item).join(Phase).filter(Phase.project_id == selected_project_id).all()
+        features = Feature.query.join(Phase).filter(Phase.project_id == selected_project_id).all()
+        items = Item.query.join(Feature).join(Phase).filter(Phase.project_id == selected_project_id).all()
     else:
         phases = Phase.query.order_by(Phase.project_id.asc(), Phase.sort_order.asc(), Phase.id.asc()).all()
+        features = Feature.query.all()
         items = Item.query.all()
-        subitems = SubItem.query.all()
 
-    critical_path_ids = compute_critical_path(phases, items, subitems)
+    critical_path_ids = compute_critical_path(phases, features, items)
     critical_set = set(critical_path_ids)
 
     gantt_tasks = []
@@ -673,20 +763,20 @@ def index():
         if f'phase-{phase.id}' in critical_set:
             cls += ' critical-path'
         gantt_tasks.append({'id': f'phase-{phase.id}','name': f'Phase: {phase.title}','start': phase_start,'end': phase_end,'progress':0,'custom_class': cls})
-        for item in phase.items:
-            item_start = item.start_date.strftime('%Y-%m-%d') if item.start_date else None
-            item_end = (item.start_date + timedelta(days=item.duration)).strftime('%Y-%m-%d') if item.start_date else None
-            cls_i = 'item-bar'
-            if item.internal_external=='external': cls_i += ' external-bar'
-            if f'item-{item.id}' in critical_set: cls_i += ' critical-path'
-            gantt_tasks.append({'id': f'item-{item.id}','name': f'Item: {item.title}','start': item_start,'end': item_end,'progress':0,'custom_class': cls_i})
-            for sub in item.subitems:
-                sub_start = sub.start_date.strftime('%Y-%m-%d') if sub.start_date else None
-                sub_end = (sub.start_date + timedelta(days=sub.duration)).strftime('%Y-%m-%d') if sub.start_date else None
-                cls_s = 'subitem-bar'
-                if sub.internal_external=='external': cls_s += ' external-bar'
-                if f'subitem-{sub.id}' in critical_set: cls_s += ' critical-path'
-                gantt_tasks.append({'id': f'subitem-{sub.id}','name': f'Sub: {sub.title}','start': sub_start,'end': sub_end,'progress':0,'custom_class': cls_s})
+        for feature in getattr(phase, 'features', []):
+            f_start = feature.start_date.strftime('%Y-%m-%d') if feature.start_date else None
+            f_end = (feature.start_date + timedelta(days=feature.duration)).strftime('%Y-%m-%d') if feature.start_date else None
+            cls_f = 'feature-bar'
+            if feature.internal_external=='external': cls_f += ' external-bar'
+            if f'feature-{feature.id}' in critical_set: cls_f += ' critical-path'
+            gantt_tasks.append({'id': f'feature-{feature.id}','name': f'Feature: {feature.title}','start': f_start,'end': f_end,'progress':0,'custom_class': cls_f})
+            for item in getattr(feature, 'items', []):
+                item_start = item.start_date.strftime('%Y-%m-%d') if item.start_date else None
+                item_end = (item.start_date + timedelta(days=item.duration)).strftime('%Y-%m-%d') if item.start_date else None
+                cls_i = 'item-bar'
+                if item.internal_external=='external': cls_i += ' external-bar'
+                if f'item-{item.id}' in critical_set: cls_i += ' critical-path'
+                gantt_tasks.append({'id': f'item-{item.id}','name': f'Item: {item.title}','start': item_start,'end': item_end,'progress':0,'custom_class': cls_i})
 
     gantt_json_js = json.dumps(gantt_tasks)
     # Calendar events (simple mapping)
@@ -699,7 +789,7 @@ def index():
     calendar_events_json = json.dumps(calendar_events)
     draft_parts = DraftPart.query.order_by(DraftPart.created_at.asc()).all()
     draft_json_js = json.dumps([
-        {'id': d.id, 'title': d.title, 'type': d.part_type, 'internal_external': d.internal_external, 'project_id': d.project_id}
+        {'id': d.id, 'title': d.title, 'type': d.part_type, 'internal_external': d.internal_external, 'project_id': d.project_id, 'needs_type': d.part_type is None}
         for d in draft_parts
     ])
     images = Image.query.all()
@@ -721,7 +811,7 @@ def index():
             pass
     critical_filter_active = (session.get('critical_filter') == 'on')
     return render_template('index.html',
-                           projects=projects, phases=phases, items=items, subitems=subitems,
+                           projects=projects, phases=phases, features=features, items=items,
                            images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js,
                            draft_json_js=draft_json_js, calendar_events_json=calendar_events_json,
                            critical_path_ids=critical_path_ids, active_usernames=active_usernames,
