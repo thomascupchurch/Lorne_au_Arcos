@@ -6,11 +6,55 @@
 </head>
 <body>
     <h2>User Management (Admin Only)</h2>
-    <ul>
+    <div style="margin-bottom:1em; display:flex; gap:1em; align-items:flex-end; flex-wrap:wrap;">
+        <form method="get" action="{{ url_for('main.admin_users') }}" style="display:flex; gap:6px; align-items:center;">
+            <label for="q">Search:</label>
+            <input type="text" name="q" id="q" value="{{ q or '' }}" placeholder="username fragment">
+            <button type="submit">Filter</button>
+            {% if q %}<a href="{{ url_for('main.admin_users') }}">Clear</a>{% endif %}
+        </form>
+        <form method="post" action="{{ url_for('main.admin_create_user') }}" style="display:flex; gap:6px; align-items:center;">
+            <strong>Create User:</strong>
+            <input type="text" name="new-username" placeholder="username" required>
+            <input type="password" name="new-password" placeholder="temp password" required>
+            <button type="submit">Add</button>
+        </form>
+        <a href="{{ url_for('main.change_password') }}">Change My Password</a>
+        <a href="{{ url_for('main.logout') }}" onclick="return confirm('Logout?');">Logout</a>
+    </div>
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse; min-width:420px;">
+    <tr style="background:#eee;"><th>Username</th><th>Role</th><th>Actions</th><th>Reset Password</th></tr>
         {% for user in users %}
-            <li>{{ user.username }} {% if not user.is_admin %}<a href="{{ url_for('main.make_admin', user_id=user.id) }}">Make Admin</a>{% else %}(Admin){% endif %}</li>
+        <tr>
+            <td>{{ user.username }}</td>
+            <td>{% if user.is_admin %}Admin{% else %}User{% endif %}</td>
+            <td style="white-space:nowrap;vertical-align:top;">
+                {% if not user.is_admin %}
+                    <a href="{{ url_for('main.make_admin', user_id=user.id) }}">Make Admin</a>
+                {% else %}
+                    {% if user.id != current_user.id %}
+                        <a href="{{ url_for('main.revoke_admin', user_id=user.id) }}" onclick="return confirm('Revoke admin rights?');">Revoke</a>
+                    {% else %}
+                        (You)
+                    {% endif %}
+                {% endif %}
+                {% if user.id != current_user.id %}
+                <form method="post" action="{{ url_for('main.admin_delete_user', user_id=user.id) }}" style="display:inline;" onsubmit="return confirm('Delete user?');">
+                    <button type="submit" style="color:red;">Delete</button>
+                </form>
+                {% endif %}
+            </td>
+            <td style="vertical-align:top;">
+                {% if user.id != current_user.id %}
+                <form method="post" action="{{ url_for('main.admin_reset_password', user_id=user.id) }}" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+                    <input type="password" name="new-password" placeholder="new password" minlength="6" required style="font-size:0.75em;">
+                    <button type="submit" style="font-size:0.7em;">Set</button>
+                </form>
+                {% else %}-{% endif %}
+            </td>
+        </tr>
         {% endfor %}
-    </ul>
+    </table>
     <a href="{{ url_for('main.index') }}">Back to Planning</a>
 </body>
 </html>

@@ -3,12 +3,187 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 import os
 from werkzeug.utils import secure_filename
 from app.models import db, User, Project, Phase, Item, SubItem, Image
-from flask_login import login_required, current_user, login_user
+from flask_login import login_required, current_user, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 import csv
 import io
 import zipfile
+
+# Critical path computation (moved to module level for reuse)
+def compute_critical_path(tasks):
+    """Compute critical path for list of task dicts each having id,start,end and optional dependencies."""
+    from datetime import datetime as _dt
+    deps = {}
+    rev = {}
+    dur = {}
+    for t in tasks:
+        s = _dt.strptime(t['start'], '%Y-%m-%d')
+        e = _dt.strptime(t['end'], '%Y-%m-%d')
+        dur[t['id']] = max(1, (e - s).days)
+        raw = t.get('dependencies') or ''
+        arr = [d for d in raw.replace(';', ' ').replace(',', ' ').split() if d]
+        deps[t['id']] = arr
+        for d in arr:
+            rev.setdefault(d, []).append(t['id'])
+    in_deg = {t['id']: 0 for t in tasks}
+    for k, arr in deps.items():
+        for d in arr:
+            if k in in_deg:
+                in_deg[k] += 1
+    queue = [k for k, v in in_deg.items() if v == 0]
+    order = []
+    while queue:
+        n = queue.pop(0)
+        order.append(n)
+        for s in rev.get(n, []):
+            in_deg[s] -= 1
+            if in_deg[s] == 0:
+                queue.append(s)
+    if len(order) != len(tasks):  # cycle fallback
+        order = [t['id'] for t in tasks]
+    es, ef = {}, {}
+    for tid in order:
+        predecessors = deps.get(tid, [])
+        if not predecessors:
+            es[tid] = 0
+        else:
+            es[tid] = max(ef.get(p, 0) for p in predecessors)
+        ef[tid] = es[tid] + dur[tid]
+    project_finish = max(ef.values()) if ef else 0
+    lf, ls = {}, {}
+    for tid in reversed(order):
+        succ = rev.get(tid, [])
+        if not succ:
+            lf[tid] = project_finish
+        else:
+            lf[tid] = min(ls[s] for s in succ)
+        ls[tid] = lf[tid] - dur[tid]
+    critical = [tid for tid in order if (ls[tid] - es[tid]) == 0]
+    crit_set = set(critical)
+    path = []
+    start_node = next((c for c in critical if es[c] == 0), None)
+    guard = 0
+    cur = start_node
+    while cur and guard < len(critical):
+        path.append(cur)
+        successors = rev.get(cur, [])
+        nxt = None
+        for s in successors:
+            if s in crit_set and es[s] == ef[cur]:
+                nxt = s
+                break
+        cur = nxt
+        guard += 1
+    if not path:
+        path = critical
+    return path
+
+# ---------- Dependency Utilities ----------
+def _parse_dependency_ids(raw: str):
+    if not raw:
+        return []
+    return [d.strip() for d in raw.replace(';', ' ').replace(',', ' ').split() if d.strip()]
+
+def _get_task_dates(dep_id):
+    """Return (start_date, end_date) for phase-/item-/subitem-* id or (None,None). end_date is inclusive finish date."""
+    if dep_id.startswith('phase-'):
+        ph = Phase.query.get(int(dep_id.split('-')[1]))
+        if ph:
+            return ph.start_date, ph.start_date + timedelta(days=ph.duration)
+    elif dep_id.startswith('item-'):
+        it = Item.query.get(int(dep_id.split('-')[1]))
+        if it:
+            return it.start_date, it.start_date + timedelta(days=it.duration)
+    elif dep_id.startswith('subitem-'):
+        si = SubItem.query.get(int(dep_id.split('-')[1]))
+        if si:
+            return si.start_date, si.start_date + timedelta(days=si.duration)
+    return None, None
+
+def _enforce_dependencies_and_containment(obj):
+    """Adjust start_date of Item/SubItem (and recompute duration unchanged) to satisfy dependencies and parent containment.
+    Returns True if modified."""
+    changed = False
+    if isinstance(obj, Item):
+        # dependency
+        dep_ids = _parse_dependency_ids(obj.dependencies)
+        if dep_ids:
+            latest_end = None
+            for did in dep_ids:
+                _, e = _get_task_dates(did)
+                if e and (latest_end is None or e > latest_end):
+                    latest_end = e
+            if latest_end and obj.start_date < latest_end:
+                shift = (latest_end - obj.start_date).days
+                obj.start_date = latest_end
+                # keep duration
+                changed = True
+        # containment (phase)
+        if obj.phase:
+            p_start = obj.phase.start_date
+            p_end = obj.phase.start_date + timedelta(days=obj.phase.duration)
+            if obj.start_date < p_start:
+                obj.start_date = p_start; changed = True
+            end_date = obj.start_date + timedelta(days=obj.duration)
+            if end_date > p_end:
+                # clamp by shortening duration (or could shift back; shorten simpler)
+                new_dur = max(1, (p_end - obj.start_date).days)
+                if new_dur != obj.duration:
+                    obj.duration = new_dur; changed = True
+    elif isinstance(obj, SubItem):
+        dep_ids = _parse_dependency_ids(obj.dependencies)
+        if dep_ids:
+            latest_end = None
+            for did in dep_ids:
+                _, e = _get_task_dates(did)
+                if e and (latest_end is None or e > latest_end):
+                    latest_end = e
+            if latest_end and obj.start_date < latest_end:
+                obj.start_date = latest_end; changed = True
+        if obj.item:
+            i_start = obj.item.start_date
+            i_end = obj.item.start_date + timedelta(days=obj.item.duration)
+            if obj.start_date < i_start:
+                obj.start_date = i_start; changed = True
+            end_date = obj.start_date + timedelta(days=obj.duration)
+            if end_date > i_end:
+                new_dur = max(1, (i_end - obj.start_date).days)
+                if new_dur != obj.duration:
+                    obj.duration = new_dur; changed = True
+    return changed
+
+def _cascade_dependents(changed_ids):
+    """Propagate dependency shifts forward. changed_ids: iterable of task ids (phase-/item-/subitem-*)."""
+    queue = list(changed_ids)
+    visited = set()
+    adjusted = []
+    # Preload all items/subitems for dependency parsing
+    all_items = Item.query.all()
+    all_subs = SubItem.query.all()
+    while queue:
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        # find dependents
+        for obj in list(all_items) + list(all_subs):
+            dep_ids = _parse_dependency_ids(getattr(obj, 'dependencies', ''))
+            if current in dep_ids:
+                before_start = obj.start_date
+                before_dur = obj.duration
+                if _enforce_dependencies_and_containment(obj):
+                    adjusted.append({'id': f'item-{obj.id}' if isinstance(obj, Item) else f'subitem-{obj.id}',
+                                     'start': str(obj.start_date),
+                                     'duration': obj.duration})
+                    queue.append(('item-' if isinstance(obj, Item) else 'subitem-') + str(obj.id))
+    if adjusted:
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            adjusted = []
+    return adjusted
 
 main = Blueprint('main', __name__, url_prefix='')
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'uploads')
@@ -41,7 +216,8 @@ def index():
     for phase in phases:
         phase_start = phase.start_date if isinstance(phase.start_date, str) else str(phase.start_date)
         phase_end = (datetime.strptime(phase_start, '%Y-%m-%d') + timedelta(days=int(phase.duration))).strftime('%Y-%m-%d')
-        phase_class = 'external-bar' if getattr(phase, 'internal_external', None) == 'external' else 'phase-bar'
+        # Always include structural class (phase-bar) and append external-bar if external
+        phase_class = 'phase-bar' + (' external-bar' if getattr(phase, 'internal_external', None) == 'external' else '')
         gantt_tasks.append({
             'id': f'phase-{phase.id}',
             'name': f'Phase: {phase.title}',
@@ -53,7 +229,7 @@ def index():
         for item in phase.items:
             item_start = item.start_date if isinstance(item.start_date, str) else str(item.start_date)
             item_end = (datetime.strptime(item_start, '%Y-%m-%d') + timedelta(days=int(item.duration))).strftime('%Y-%m-%d')
-            item_class = 'external-bar' if getattr(item, 'internal_external', None) == 'external' else 'item-bar'
+            item_class = 'item-bar' + (' external-bar' if getattr(item, 'internal_external', None) == 'external' else '')
             gantt_tasks.append({
                 'id': f'item-{item.id}',
                 'name': f'Item: {item.title}',
@@ -62,6 +238,25 @@ def index():
                 'progress': 0,
                 'custom_class': item_class
             })
+            for sub in item.subitems:
+                sub_start = sub.start_date if isinstance(sub.start_date, str) else str(sub.start_date)
+                sub_end = (datetime.strptime(sub_start, '%Y-%m-%d') + timedelta(days=int(sub.duration))).strftime('%Y-%m-%d')
+                sub_class = 'subitem-bar' + (' external-bar' if getattr(sub, 'internal_external', None) == 'external' else '')
+                gantt_tasks.append({
+                    'id': f'subitem-{sub.id}',
+                    'name': f'Sub: {sub.title}',
+                    'start': sub_start,
+                    'end': sub_end,
+                    'progress': 0,
+                    'custom_class': sub_class
+                })
+    critical_path_ids = compute_critical_path(gantt_tasks)
+    # Annotate tasks with critical path class
+    crit_set = set(critical_path_ids)
+    for t in gantt_tasks:
+        if t['id'] in crit_set:
+            existing = t.get('custom_class','')
+            t['custom_class'] = (existing + ' critical-path').strip()
     gantt_json_js = json.dumps(gantt_tasks)
 
     # Build calendar events in Python
@@ -86,7 +281,55 @@ def index():
             })
     calendar_events_json = json.dumps(calendar_events)
     images = Image.query.all()
-    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js, calendar_events_json=calendar_events_json)
+    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js, calendar_events_json=calendar_events_json, critical_path_ids=critical_path_ids)
+
+@main.route('/export_calendar_ics')
+@login_required
+def export_calendar_ics():
+    """Export current (filtered) phases, items, and subitems as an ICS (Outlook) calendar."""
+    selected_project_id = session.get('selected_project_id')
+    if selected_project_id:
+        phases = Phase.query.filter_by(project_id=selected_project_id).all()
+    else:
+        phases = Phase.query.all()
+    lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//PlanningApp//EN',
+        'CALSCALE:GREGORIAN'
+    ]
+    def add_event(uid_prefix, title, start_date, duration):
+        try:
+            s = start_date if isinstance(start_date, str) else str(start_date)
+            from datetime import datetime as _dt, timedelta as _td
+            d1 = _dt.strptime(s, '%Y-%m-%d')
+            d2 = d1 + _td(days=int(duration))
+            # ICS all-day DTEND is non-inclusive -> add one more day
+            dtstart = d1.strftime('%Y%m%d')
+            dtend = (d2).strftime('%Y%m%d')
+            uid = f"{uid_prefix}-{dtstart}@planningapp"
+            summary = title.replace('\n',' ').replace('\r',' ')
+            lines.extend([
+                'BEGIN:VEVENT',
+                f'UID:{uid}',
+                f"DTSTAMP:{_dt.utcnow().strftime('%Y%m%dT%H%M%SZ')}",
+                f'DTSTART;VALUE=DATE:{dtstart}',
+                f'DTEND;VALUE=DATE:{dtend}',
+                f'SUMMARY:{summary}',
+                'END:VEVENT'
+            ])
+        except Exception:
+            pass
+    for ph in phases:
+        add_event(f'phase-{ph.id}', f'Phase: {ph.title}', ph.start_date, ph.duration)
+        for it in ph.items:
+            add_event(f'item-{it.id}', f'Item: {it.title}', it.start_date, it.duration)
+            for sub in it.subitems:
+                add_event(f'subitem-{sub.id}', f'Sub: {sub.title}', sub.start_date, sub.duration)
+    lines.append('END:VCALENDAR')
+    ics_data = '\r\n'.join(lines)
+    from flask import Response
+    return Response(ics_data, mimetype='text/calendar', headers={'Content-Disposition':'attachment; filename="planning_export.ics"'})
 
 @main.route('/power_t_inline')
 def power_t_inline():
@@ -97,6 +340,67 @@ def power_t_inline():
     # minimal inline T shape fallback
     fallback = """<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 70'><rect width='120' height='70' fill='#FF8200'/><rect x='50' y='20' width='20' height='40' fill='#fff'/></svg>"""
     return fallback, 200, { 'Content-Type':'image/svg+xml' }
+
+@main.route('/lsi_logo')
+def lsi_logo():
+    """Serve LSI_Graphics_OE.png from repo root; provide tiny transparent fallback if missing."""
+    png_path = os.path.abspath(os.path.join(current_app.root_path, '..', 'LSI_Graphics_OE.png'))
+    if os.path.exists(png_path):
+        try:
+            return send_file(png_path, mimetype='image/png')
+        except Exception as e:
+            print('Error sending LSI logo:', e)
+    # 1x1 transparent PNG fallback
+    transparent_png = (b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0cIDATx\x9cc`````\x00\x00\x00\x05\x00\x01\x0d\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82")
+    return send_file(io.BytesIO(transparent_png), mimetype='image/png')
+
+@main.route('/debug_lsi_logo')
+@login_required
+def debug_lsi_logo():
+    """Return JSON diagnostics about LSI logo availability (admin only)."""
+    if not current_user.is_admin:
+        return {'error':'admin required'}, 403
+    repo_root = os.path.abspath(os.path.join(current_app.root_path, '..'))
+    paths = {
+        'static_config': current_app.static_folder,
+        'expected_static_file': os.path.join(current_app.static_folder, 'LSI_Graphics_OE.png'),
+        'legacy_root_file': os.path.join(repo_root, 'LSI_Graphics_OE.png')
+    }
+    exists = { k: os.path.exists(v) for k,v in paths.items() }
+    return { 'paths': paths, 'exists': exists }
+
+@main.route('/admin/run_migrations')
+@login_required
+def run_migrations():
+    if not current_user.is_admin:
+        flash('Admin access required.')
+        return redirect(url_for('main.index'))
+    from sqlalchemy import text
+    added = []
+    try:
+        engine = db.engine
+        def ensure(table,col_def):
+            col = col_def.split()[0]
+            with engine.connect() as conn:
+                info = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
+                existing = {r[1] for r in info}
+                if col not in existing:
+                    try:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_def}"))
+                        added.append(f"{table}.{col}")
+                    except Exception:
+                        pass
+        ensure('phase','notes TEXT')
+        ensure('item','notes TEXT')
+        ensure('sub_item','notes TEXT')
+    except Exception as e:
+        flash(f'Migration error: {e}')
+        return redirect(url_for('main.index'))
+    if added:
+        flash('Added columns: ' + ', '.join(added))
+    else:
+        flash('No migration changes needed.')
+    return redirect(url_for('main.index'))
 
 @main.route('/upload', methods=['POST'])
 @login_required
@@ -168,9 +472,10 @@ def create_phase():
     is_milestone = bool(request.form.get('phase-milestone'))
     internal_external = request.form.get('phase-type')
     project_id = request.form.get('project-id')
+    notes = request.form.get('phase-notes')
     if title and start_date and duration and project_id:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
-        phase = Phase(title=title, start_date=start_date_obj, duration=duration, is_milestone=is_milestone, internal_external=internal_external, project_id=project_id)
+        phase = Phase(title=title, start_date=start_date_obj, duration=duration, is_milestone=is_milestone, internal_external=internal_external, project_id=project_id, notes=notes)
         db.session.add(phase)
         db.session.commit()
         flash('Phase added!')
@@ -187,11 +492,14 @@ def create_item():
     is_milestone = bool(request.form.get('item-milestone'))
     internal_external = request.form.get('item-type')
     phase_id = request.form.get('phase-id')
+    notes = request.form.get('item-notes')
     if title and start_date and duration and phase_id:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
-        item = Item(title=title, start_date=start_date_obj, duration=duration, dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, phase_id=phase_id)
-        db.session.add(item)
-        db.session.commit()
+    item = Item(title=title, start_date=start_date_obj, duration=int(duration), dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, phase_id=phase_id, notes=notes)
+    db.session.add(item)
+    db.session.flush()
+    _enforce_dependencies_and_containment(item)
+    db.session.commit()
         flash('Item added!')
     return redirect(url_for('main.index'))
 
@@ -206,11 +514,14 @@ def create_subitem():
     is_milestone = bool(request.form.get('subitem-milestone'))
     internal_external = request.form.get('subitem-type')
     item_id = request.form.get('item-id')
+    notes = request.form.get('subitem-notes')
     if title and start_date and duration and item_id:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
-        subitem = SubItem(title=title, start_date=start_date_obj, duration=duration, dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, item_id=item_id)
-        db.session.add(subitem)
-        db.session.commit()
+    subitem = SubItem(title=title, start_date=start_date_obj, duration=int(duration), dependencies=dependencies, is_milestone=is_milestone, internal_external=internal_external, item_id=item_id, notes=notes)
+    db.session.add(subitem)
+    db.session.flush()
+    _enforce_dependencies_and_containment(subitem)
+    db.session.commit()
         flash('Sub-Item added!')
     return redirect(url_for('main.index'))
 
@@ -227,29 +538,89 @@ def make_admin(user_id):
         flash(f'User {user.username} is now an admin.')
     return redirect(url_for('main.index'))
 
+@main.route('/revoke_admin/<int:user_id>')
+@login_required
+def revoke_admin(user_id):
+    if not current_user.is_admin:
+        flash('Admin access required.')
+        return redirect(url_for('main.index'))
+    user = User.query.get(user_id)
+    if user and user.id != current_user.id:  # prevent self-revoke
+        user.is_admin = False
+        db.session.commit()
+        flash(f'Admin rights revoked for {user.username}.')
+    else:
+        flash('Cannot revoke this user.')
+    return redirect(url_for('main.admin_users'))
+
 @main.route('/admin/users')
 @login_required
 def admin_users():
     if not current_user.is_admin:
         flash('Admin access required.')
         return redirect(url_for('main.index'))
-    users = User.query.all()
-    return render_template('admin_users.html', users=users)
+    q = request.args.get('q','').strip()
+    query = User.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter(User.username.ilike(like))
+    users = query.order_by(User.username.asc()).all()
+    return render_template('admin_users.html', users=users, q=q)
+
+@main.route('/admin')
+@login_required
+def admin_dashboard():
+    if not current_user.is_admin:
+        flash('Admin access required.')
+        return redirect(url_for('main.index'))
+    stats = {
+        'users': User.query.count(),
+        'projects': Project.query.count(),
+        'phases': Phase.query.count(),
+        'items': Item.query.count(),
+        'subitems': SubItem.query.count(),
+        'images': Image.query.count()
+    }
+    recent_users = User.query.order_by(User.id.desc()).limit(5).all()
+    return render_template('admin_dashboard.html', stats=stats, recent_users=recent_users)
 
 @main.route('/login', methods=['GET', 'POST'], endpoint='login')
 def login():
+    # Basic session-based throttle
+    import time
+    MAX_ATTEMPTS = 5
+    LOCK_SECONDS = 300
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+    locked_until = session.get('login_lock_until')
+    if locked_until and locked_until > time.time():
+        flash(f'Too many attempts. Try again in {int(locked_until - time.time())}s')
+        return render_template('login.html')
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = request.form.get('username','').strip()
+        password = request.form.get('password','')
+        attempts = session.get('login_attempts', 0)
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
+            session['login_attempts'] = 0
+            session.pop('login_lock_until', None)
             login_user(user)
-            flash('Logged in successfully')
+            flash('Signed in')
             return redirect(url_for('main.index'))
+        attempts += 1
+        session['login_attempts'] = attempts
+        remaining = MAX_ATTEMPTS - attempts
+        if remaining <= 0:
+            session['login_lock_until'] = time.time() + LOCK_SECONDS
+            flash('Account locked for 5 minutes due to repeated failures.')
         else:
-            flash('Invalid credentials')
-            return redirect(url_for('main.login'))
+            flash(f'Invalid credentials. {remaining} attempts left.')
+        return redirect(url_for('main.login'))
     return render_template('login.html')
+
+@main.route('/signin', methods=['GET','POST'])
+def signin():
+    return login()
 
 @main.route('/register', methods=['GET', 'POST'], endpoint='register')
 def register():
@@ -268,6 +639,98 @@ def register():
         flash('Registration successful. Please log in.')
         return redirect(url_for('main.login'))
     return render_template('register.html')
+
+@main.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Logged out.')
+    return redirect(url_for('main.login'))
+
+@main.route('/change_password', methods=['GET','POST'])
+@login_required
+def change_password():
+    if request.method == 'POST':
+        old = request.form.get('old-password')
+        new = request.form.get('new-password')
+        confirm = request.form.get('confirm-password')
+        if not old or not new or not confirm:
+            flash('All fields required')
+            return redirect(url_for('main.change_password'))
+        if not check_password_hash(current_user.password_hash, old):
+            flash('Current password incorrect')
+            return redirect(url_for('main.change_password'))
+        if new != confirm:
+            flash('Passwords do not match')
+            return redirect(url_for('main.change_password'))
+        if len(new) < 6:
+            flash('Password must be at least 6 characters')
+            return redirect(url_for('main.change_password'))
+        current_user.password_hash = generate_password_hash(new)
+        db.session.commit()
+        flash('Password updated')
+        return redirect(url_for('main.index'))
+    return render_template('change_password.html')
+
+@main.route('/admin/create_user', methods=['POST'])
+@login_required
+def admin_create_user():
+    if not current_user.is_admin:
+        flash('Admin access required.')
+        return redirect(url_for('main.index'))
+    username = request.form.get('new-username')
+    password = request.form.get('new-password')
+    if not username or not password:
+        flash('Username and password required')
+        return redirect(url_for('main.admin_users'))
+    if User.query.filter_by(username=username).first():
+        flash('Username already exists')
+        return redirect(url_for('main.admin_users'))
+    if len(password) < 6:
+        flash('Password must be at least 6 characters')
+        return redirect(url_for('main.admin_users'))
+    user = User(username=username, password_hash=generate_password_hash(password))
+    db.session.add(user)
+    db.session.commit()
+    flash('User created')
+    return redirect(url_for('main.admin_users'))
+
+@main.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+def admin_delete_user(user_id):
+    if not current_user.is_admin:
+        flash('Admin access required.')
+        return redirect(url_for('main.index'))
+    if current_user.id == user_id:
+        flash('You cannot delete yourself.')
+        return redirect(url_for('main.admin_users'))
+    user = User.query.get_or_404(user_id)
+    if user.projects and len(user.projects) > 0:
+        flash('Cannot delete user who owns projects.')
+        return redirect(url_for('main.admin_users'))
+    db.session.delete(user)
+    db.session.commit()
+    flash('User deleted')
+    return redirect(url_for('main.admin_users'))
+
+@main.route('/admin/reset_password/<int:user_id>', methods=['POST'])
+@login_required
+def admin_reset_password(user_id):
+    if not current_user.is_admin:
+        flash('Admin access required.')
+        return redirect(url_for('main.index'))
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash('Use Change Password for your own account.')
+        return redirect(url_for('main.admin_users'))
+    new_pw = request.form.get('new-password')
+    if not new_pw or len(new_pw) < 6:
+        flash('Provide a new password (min 6 chars).')
+        return redirect(url_for('main.admin_users'))
+    user.password_hash = generate_password_hash(new_pw)
+    db.session.commit()
+    flash(f'Password reset for {user.username}.')
+    return redirect(url_for('main.admin_users'))
 
 @main.route('/edit_project/<int:project_id>', methods=['POST'])
 @login_required
@@ -289,6 +752,7 @@ def edit_phase(phase_id):
     duration = request.form.get('phase-duration')
     is_milestone = bool(request.form.get('phase-milestone'))
     internal_external = request.form.get('phase-type')
+    notes = request.form.get('phase-notes')
     if title and start_date and duration:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
         duration_int = int(duration)
@@ -297,6 +761,8 @@ def edit_phase(phase_id):
         phase.duration = duration_int
         phase.is_milestone = is_milestone
         phase.internal_external = internal_external
+        if notes is not None:
+            phase.notes = notes
         # Cascade update: ensure all items fit within phase
         phase_end = start_date_obj + timedelta(days=duration_int)
         for item in phase.items:
@@ -329,6 +795,7 @@ def edit_item(item_id):
     dependencies = request.form.get('item-dependencies')
     is_milestone = bool(request.form.get('item-milestone'))
     internal_external = request.form.get('item-type')
+    notes = request.form.get('item-notes')
     if title and start_date and duration:
         start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
         duration_int = int(duration)
@@ -338,6 +805,8 @@ def edit_item(item_id):
         item.dependencies = dependencies
         item.is_milestone = is_milestone
         item.internal_external = internal_external
+        if notes is not None:
+            item.notes = notes
         # Cascade update: ensure all subitems fit within item
         item_end = start_date_obj + timedelta(days=duration_int)
         for subitem in item.subitems:
@@ -348,6 +817,32 @@ def edit_item(item_id):
                 subitem.duration = (item_end - subitem.start_date).days
         db.session.commit()
         flash('Item updated and children validated!')
+    return redirect(url_for('main.index'))
+
+@main.route('/edit_subitem/<int:subitem_id>', methods=['POST'])
+@login_required
+def edit_subitem(subitem_id):
+    subitem = SubItem.query.get_or_404(subitem_id)
+    title = request.form.get('subitem-title')
+    start_date = request.form.get('subitem-start')
+    duration = request.form.get('subitem-duration')
+    dependencies = request.form.get('subitem-dependencies')
+    is_milestone = bool(request.form.get('subitem-milestone'))
+    internal_external = request.form.get('subitem-type')
+    notes = request.form.get('subitem-notes')
+    if title and start_date and duration:
+        start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+        duration_int = int(duration)
+        subitem.title = title
+        subitem.start_date = start_date_obj
+        subitem.duration = duration_int
+        subitem.dependencies = dependencies
+        subitem.is_milestone = is_milestone
+        subitem.internal_external = internal_external
+        if notes is not None:
+            subitem.notes = notes
+        db.session.commit()
+        flash('Sub-Item updated!')
     return redirect(url_for('main.index'))
 
 @main.route('/delete_project/<int:project_id>', methods=['POST'])
@@ -407,14 +902,14 @@ def export_project(project_id):
     # Prepare CSV data
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(['Type', 'ID', 'Title', 'Start Date', 'Duration', 'Dependencies', 'Milestone', 'Internal/External', 'Parent ID'])
-    writer.writerow(['Project', project.id, project.title, '', '', '', '', '', ''])
+    writer.writerow(['Type', 'ID', 'Title', 'Start Date', 'Duration', 'Dependencies', 'Milestone', 'Internal/External', 'Parent ID', 'Notes'])
+    writer.writerow(['Project', project.id, project.title, '', '', '', '', '', '', ''])
     for phase in project.phases:
-        writer.writerow(['Phase', phase.id, phase.title, phase.start_date, phase.duration, '', phase.is_milestone, phase.internal_external, project.id])
+        writer.writerow(['Phase', phase.id, phase.title, phase.start_date, phase.duration, '', phase.is_milestone, phase.internal_external, project.id, (phase.notes or '')])
         for item in phase.items:
-            writer.writerow(['Item', item.id, item.title, item.start_date, item.duration, item.dependencies, item.is_milestone, item.internal_external, phase.id])
+            writer.writerow(['Item', item.id, item.title, item.start_date, item.duration, item.dependencies, item.is_milestone, item.internal_external, phase.id, (item.notes or '')])
             for subitem in item.subitems:
-                writer.writerow(['SubItem', subitem.id, subitem.title, subitem.start_date, subitem.duration, subitem.dependencies, subitem.is_milestone, subitem.internal_external, item.id])
+                writer.writerow(['SubItem', subitem.id, subitem.title, subitem.start_date, subitem.duration, subitem.dependencies, subitem.is_milestone, subitem.internal_external, item.id, (subitem.notes or '')])
     csv_bytes = io.BytesIO()
     csv_bytes.write(output.getvalue().encode('utf-8'))
     csv_bytes.seek(0)
@@ -506,7 +1001,7 @@ def update_gantt_task():
     end = data.get('end')
     duration = None
     # Calculate duration from start and end
-    from datetime import datetime
+    from datetime import datetime, timedelta
     try:
         d1 = datetime.strptime(start, '%Y-%m-%d')
         d2 = datetime.strptime(end, '%Y-%m-%d')
@@ -516,41 +1011,72 @@ def update_gantt_task():
     # Update phase/item/subitem
     updated = False
     new_title = data.get('title')
+    changed_ids = []
     if tid.startswith('phase-'):
         obj = Phase.query.get(int(tid.split('-')[1]))
         if obj:
-            obj.start_date = start
+            obj.start_date = d1.date()
             obj.duration = duration
             if new_title:
-                # Remove 'Phase: ' prefix if present
                 if new_title.startswith('Phase: '):
                     obj.title = new_title.replace('Phase: ', '', 1)
                 else:
                     obj.title = new_title
             db.session.commit()
             updated = True
+            changed_ids.append(f'phase-{obj.id}')
     elif tid.startswith('item-'):
         obj = Item.query.get(int(tid.split('-')[1]))
         if obj:
-            # Convert start to date object if needed
-            if isinstance(obj.start_date, str):
-                try:
-                    obj.start_date = datetime.strptime(start, '%Y-%m-%d').date()
-                except Exception:
-                    obj.start_date = start
-            else:
-                obj.start_date = datetime.strptime(start, '%Y-%m-%d').date()
-            obj.duration = duration
+            obj.start_date = d1.date(); obj.duration = duration
             if new_title:
-                # Remove 'Item: ' prefix if present
                 if new_title.startswith('Item: '):
                     obj.title = new_title.replace('Item: ', '', 1)
                 else:
                     obj.title = new_title
+            _enforce_dependencies_and_containment(obj)
             db.session.commit()
             updated = True
+            changed_ids.append(f'item-{obj.id}')
+    elif tid.startswith('subitem-'):
+        obj = SubItem.query.get(int(tid.split('-')[1]))
+        if obj:
+            obj.start_date = d1.date(); obj.duration = duration
+            if new_title:
+                if new_title.startswith('Sub: '):
+                    obj.title = new_title.replace('Sub: ', '', 1)
+                else:
+                    obj.title = new_title
+            _enforce_dependencies_and_containment(obj)
+            db.session.commit()
+            updated = True
+            changed_ids.append(f'subitem-{obj.id}')
     # (Optional: add subitem support if needed)
     print('GANTT UPDATE:', tid, start, end, duration, updated)
+    cascade_adjustments = []
     if updated:
-        return 'OK', 200
+        # Cascade forward if necessary (skip for phase until needed)
+        cascade_adjustments = _cascade_dependents(changed_ids)
+        # Rebuild task list for fresh critical path computation (phases + items only like index)
+        phases = Phase.query.all()
+        tasks = []
+        from datetime import datetime as _dt
+        for phase in phases:
+            p_start = str(phase.start_date)
+            p_end = (_dt.strptime(p_start, '%Y-%m-%d') + timedelta(days=int(phase.duration))).strftime('%Y-%m-%d')
+            tasks.append({'id': f'phase-{phase.id}', 'start': p_start, 'end': p_end, 'dependencies': ''})
+            for item in phase.items:
+                i_start = str(item.start_date)
+                i_end = (_dt.strptime(i_start, '%Y-%m-%d') + timedelta(days=int(item.duration))).strftime('%Y-%m-%d')
+                tasks.append({'id': f'item-{item.id}', 'start': i_start, 'end': i_end, 'dependencies': item.dependencies or ''})
+        cp_ids = compute_critical_path(tasks)
+        return {
+            'id': tid,
+            'start': start,
+            'end': end,
+            'duration': duration,
+            'title': new_title or '',
+            'critical_path': cp_ids,
+            'cascade': cascade_adjustments
+        }, 200
     return 'Not found', 404

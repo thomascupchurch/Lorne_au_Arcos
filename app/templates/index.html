@@ -1,20 +1,62 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
+    <!-- FullCalendar assets -->
+    <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
     <style>
-        .gantt .bar {
-            fill: #FF8200 !important;
-            stroke: #FF8200 !important;
-        }
-        .gantt .bar.external-bar {
-            fill: #4B4B4B !important;
-            stroke: #4B4B4B !important;
-        }
+    /* Gantt bar styling with opacity tiers for hierarchy containment (phase > item > subitem) */
+    /* Uniform bar styling (reverted original thickness) */
+    .gantt .bar { stroke-width:1; height:20px; rx:3; ry:3; }
+    .gantt .bar.subitem-bar, .gantt .bar.item-bar, .gantt .bar.phase-bar { height:20px; }
+    /* Hide default per-task grid rows (we will supply 3 category lanes) */
+    .gantt .grid .row:not(:first-child) { display:none; }
+    .gantt .grid .row:first-child rect { height:120px !important; }
+    /* Re-center thicker bars vertically inside wrapper */
+    .gantt .bar-wrapper .bar { transform-origin: left center; }
+    /* Internal (default) vs external colors; handle class on rect OR wrapper */
+    .gantt .bar.phase-bar,
+    .gantt .bar.item-bar,
+    .gantt .bar.subitem-bar,
+    .gantt .bar-wrapper.phase-bar .bar,
+    .gantt .bar-wrapper.item-bar .bar,
+    .gantt .bar-wrapper.subitem-bar .bar { fill:#FF8200 !important; stroke:#FF8200 !important; }
+    .gantt .bar.external-bar,
+    .gantt .bar-wrapper.external-bar .bar { fill:#4B4B4B !important; stroke:#4B4B4B !important; }
+    /* Remove previous opacity tiers for clear color fidelity */
+        .gantt .bar.critical-path { stroke:#d90000 !important; stroke-width:2 !important; filter:drop-shadow(0 0 4px rgba(217,0,0,0.5)); }
+        /* Group band styling */
+        .phase-group-band { fill:rgba(255,130,0,0.06); }
         body {
             margin: 0;
             font-family: 'Segoe UI', 'Arial', sans-serif;
             background: #4B4B4B;
+            padding-top:230px; /* reserve space for fixed branding header */
+            box-sizing:border-box;
         }
+    /* FullCalendar dark adjustments */
+    .fc { --fc-border-color:#666; --fc-page-bg-color:#4B4B4B; --fc-neutral-bg-color:#555; --fc-neutral-text-color:#eee; }
+    .fc .fc-toolbar-title { color:#fff; }
+    .fc .fc-button { background:#333; border:1px solid #666; color:#eee; }
+    .fc .fc-button:hover { background:#444; }
+    .fc .fc-button-primary:not(:disabled).fc-button-active, .fc .fc-button-primary:focus { background:#555; border-color:#888; }
+    .fc-theme-standard td, .fc-theme-standard th { border-color:#666; }
+    /* Calendar date numbers - stronger contrast */
+    .fc .fc-daygrid-day-number, .fc a.fc-daygrid-day-number { color:#d0d0d0 !important; font-weight:600; text-decoration:none; transition:color .15s ease; }
+    .fc .fc-daygrid-day-number:hover { color:#ffffff !important; }
+    /* Muted days outside current month */
+    .fc .fc-daygrid-day.fc-day-other .fc-daygrid-day-number { color:#888 !important; }
+    .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number { color:#222; background:#FFB366; border-radius:4px; padding:2px 4px; }
+    .fc-daygrid-day.fc-day-today { background:rgba(255,130,0,0.18); }
+    .fc .fc-col-header-cell-cushion { color:#f0f0f0; }
+    .fc .fc-scrollgrid { border:1px solid #777; }
+    .fc-event { background:#FF8200 !important; border:1px solid #d96c00 !important; color:#111 !important; font-weight:600; }
+    .fc-event.fc-event-external { background:#4B4B4B !important; border:1px solid #2f2f2f !important; color:#fff !important; }
+    .fc .fc-daygrid-event { padding:2px 4px; border-radius:6px; }
+    .fc .fc-daygrid-block-event .fc-event-time { font-weight:500; }
+    .fc .fc-daygrid-block-event .fc-event-title { font-weight:600; }
+    .fc .fc-popover { background:#333; color:#eee; border:1px solid #666; }
+    .fc .fc-popover .fc-popover-header { background:#444; }
         .container {
             display: flex;
             height: 100vh;
@@ -49,9 +91,10 @@
         #image-viewer-thumbnails::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.35); border-radius:8px; }
         .thumbnail { width:72px; height:72px; object-fit:cover; border:2px solid #fff; border-radius:10px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.25); transition:transform .15s; }
         .thumbnail:hover { transform:scale(1.05); }
-        #full-image-container { flex:0 0 auto; width:100%; margin-top:0.5em; background:rgba(0,0,0,0.15); border:2px dashed rgba(255,255,255,0.4); border-radius:16px; padding:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:220px; max-height:300px; box-sizing:border-box; }
+    /* Make full image container flex and fill remaining vertical space */
+    #full-image-container { flex:1 1 auto; width:100%; margin-top:0.5em; background:rgba(0,0,0,0.15); border:2px dashed rgba(255,255,255,0.4); border-radius:16px; padding:10px; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:220px; box-sizing:border-box; overflow:hidden; }
         #full-image-container.empty { opacity:0.6; }
-        #full-image { max-width:100%; max-height:200px; object-fit:contain; }
+    #full-image { max-width:100%; max-height:100%; object-fit:contain; }
         #full-image-container button { margin-top:6px; background:#fff; color:#FF8200; border:none; padding:6px 14px; border-radius:20px; font-weight:600; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.25); }
         #full-image-container button:hover { background:#ffe0c2; }
         .planning-section {
@@ -124,13 +167,11 @@
             font-size: 2em;
             cursor: pointer;
         }
-    /* Power T overlay styling inside planning section */
+    /* Planning section base (logos removed) */
     .planning-section { position:relative; }
-    #power-t-logo { position:absolute; top:8px; left:50%; transform:translateX(-50%); height:90%; max-height:95%; width:auto; opacity:0.09; pointer-events:none; z-index:0; }
+    /* (Moved critical-path styling into pattern-based rule above) */
+    .assoc-node.selected-node { outline:2px solid #FF8200; outline-offset:2px; border-radius:4px; }
     .planning-section .planning-scroll { position:relative; z-index:1; }
-    @media (max-width:1400px){ #power-t-logo { height:80%; } }
-    @media (max-width:1100px){ #power-t-logo { height:70%; } }
-    @media (max-width:800px){ #power-t-logo { height:55%; } }
     </style>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -140,7 +181,23 @@
     <!-- Removed conflicting light mode styles and .darkmode rules -->
 </head>
 <body>
-    <!-- Dark mode is now default, toggle removed; Power T moved inside planning section as overlay -->
+    <!-- Removed old SVG texture patterns (abandoned texture approach) -->
+    <header style="display:flex;justify-content:center;align-items:center;gap:0;padding:4px 0 2px 0;position:fixed;top:0;left:0;right:0;z-index:1000;background:#4B4B4B;">
+    <img src="{{ url_for('static', filename='Power_T.svg') }}" alt="Power T" style="height:220px;width:auto;object-fit:contain;display:block;transform:translate(110px,-9px);">
+        <div style="width:1px;height:90px;background:#888;margin:0 4px;align-self:center;box-shadow:0 0 0 1px rgba(255,255,255,0.05);"></div>
+        <img src="{{ url_for('static', filename='LSI_Graphics.svg') }}" alt="LSI Graphics" style="height:110px;width:auto;object-fit:contain;display:block;margin-left:-2px;">
+        {% if current_user.is_authenticated %}
+        <div style="position:absolute;right:14px;bottom:10px;font:12px/1.2 'Segoe UI',sans-serif;color:#ddd;background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:8px;backdrop-filter:blur(2px);display:flex;align-items:center;gap:8px;">
+            <span style="opacity:0.9;">{{ current_user.username }}</span>
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('main.admin_users') }}" style="color:#FF8200;background:#fff;padding:4px 8px;border-radius:6px;text-decoration:none;font-weight:600;">Admin</a>
+            {% endif %}
+            <a href="{{ url_for('main.change_password') }}" style="color:#fff;text-decoration:none;font-weight:600;">Password</a>
+            <a href="{{ url_for('main.logout') }}" style="color:#FF8200;background:#fff;padding:4px 8px;border-radius:6px;text-decoration:none;font-weight:600;">Logout</a>
+        </div>
+        {% endif %}
+    </header>
+    <!-- Dark mode is now default -->
     <div class="container">
     <div class="image-viewer" id="image-viewer-panel">
             <h2>Image Viewer</h2>
@@ -166,42 +223,16 @@
                 </select>
                 <button type="submit">Upload</button>
             </form>
-            <div id="image-viewer-thumbnails">
-                {% for img in images %}
-                    <div style="display:inline-block; position:relative;">
-                        <img src="{{ url_for('main.uploaded_file', filename=img.filename) }}" class="thumbnail" title="{{ img.filename }}" onclick="showFullImage(this.src)">
-                        {% if not img.phase_id and not img.item_id and not img.subitem_id %}
-                        <form action="/delete_image/{{ img.id }}" method="post" style="position:absolute;top:2px;right:2px;">
-                            <button type="submit" style="background:#fff;color:#FF8200;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-weight:bold;">&times;</button>
-                        </form>
-                        {% endif %}
-                    </div>
-                {% endfor %}
-            </div>
+            <div id="image-viewer-thumbnails" style="display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;"></div>
             <div id="full-image-container" class="empty">
-                <div id="placeholder-text" style="text-align:center;font-size:0.9em;line-height:1.4; padding:0 6px;">Select a thumbnail to preview it here.</div>
+                <div id="placeholder-text" style="text-align:center;font-size:0.9em;line-height:1.4; padding:0 6px;">Select a phase, item, or sub-item to load images.</div>
                 <img id="full-image" src="" style="display:none;">
                 <button id="close-full-image" style="display:none;" onclick="hideFullImage()">Close</button>
             </div>
+            <script id="all-images-data" type="application/json">[{% for img in images %}{"id":{{ img.id }},"filename":"{{ img.filename }}","url":"{{ url_for('main.uploaded_file', filename=img.filename) }}","phase_id":{{ img.phase_id if img.phase_id else 'null' }},"item_id":{{ img.item_id if img.item_id else 'null' }},"subitem_id":{{ img.subitem_id if img.subitem_id else 'null' }} }{% if not loop.last %},{% endif %}{% endfor %}]</script>
         </div>
     <div id="viewer-resize-handle" class="resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize image viewer" title="Drag to resize (double-click to reset)"></div>
                 <div class="planning-section">
-                    <img id="power-t-logo" src="{{ url_for('static', filename='Power_T.svg') }}" alt="Power T">
-                    <script>
-                        document.addEventListener('DOMContentLoaded',function(){
-                            var img=document.getElementById('power-t-logo');
-                            if(!img) return;
-                            let retried=false;
-                            img.addEventListener('error',function(){
-                                if(!retried){
-                                    retried=true;
-                                    this.src='/power_t_inline';
-                                } else {
-                                    this.alt='Power T logo unavailable';
-                                }
-                            });
-                        });
-                    </script>
                     <div class="planning-scroll">
             <div style="margin-bottom:2em;display:flex;align-items:center;gap:1em;">
                 <label for="project-select" style="font-weight:600;">Project:</label>
@@ -224,11 +255,17 @@
                 <button onclick="showView('gantt')" id="btn-gantt">Gantt Chart</button>
                 <button onclick="showView('calendar')" id="btn-calendar">Calendar</button>
                 <button onclick="showView('timeline')" id="btn-timeline">Timeline</button>
+                {% if current_user.is_admin %}
+                <a href="/admin/users" style="margin-left:auto;background:#FF8200;color:#fff;padding:0.4em 0.8em;border-radius:6px;text-decoration:none;font-size:0.85em;">User Admin</a>
+                {% endif %}
             </div>
             <div id="planning-view" style="margin-bottom:2em;">
                 <div id="gantt-view" style="display:block;">
                     <h3>Gantt Chart</h3>
-                    <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px;"></div>
+                    <div id="gantt-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px; position:relative;"></div>
+                    <div id="critical-path-container" style="margin-top:0.5em; font-size:0.8em; background:#fff; padding:0.6em 0.8em; border-radius:10px; border:1px solid #ccc;">
+                        <strong>Critical Path:</strong> <span id="critical-path-list" style="color:#d90000;">(calculating...)</span>
+                    </div>
                 </div>
                 <div id="calendar-view" style="display:none;">
                     <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -239,7 +276,11 @@
                 </div>
                 <div id="timeline-view" style="display:none;">
                     <h3>Timeline</h3>
-                    <div id="timeline-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px;"></div>
+                    <div id="timeline-chart" style="height:400px; border:1px solid #888; background:#fff; border-radius:16px; overflow:auto; padding:1em; font:14px/1.4 'Segoe UI', Arial, sans-serif;">
+                        <p style="margin-top:0;color:#555;">Chronological view of phases and items.</p>
+                        <ul id="timeline-list" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:row;align-items:flex-start;gap:1.5em;">
+                        </ul>
+                    </div>
                 </div>
             </div>
             <div id="planning-ui" style="background:rgba(255,255,255,0.03);border-radius:16px;padding:1em;box-shadow:0 2px 8px rgba(0,0,0,0.08);margin-bottom:1em;">
@@ -260,6 +301,7 @@
                             <option value="{{ project.id }}">{{ project.title }}</option>
                             {% endfor %}
                         </select>
+                                            <textarea name="phase-notes" placeholder="Notes" style="width:100%;min-height:60px;margin-top:4px;"></textarea>
                         <button type="submit">Add</button>
                     </form>
                     <form id="item-form" action="/create_item" method="post" style="flex:1;min-width:220px;max-width:260px;">
@@ -279,6 +321,7 @@
                             <option value="{{ phase.id }}">{{ phase.title }}</option>
                             {% endfor %}
                         </select>
+                                            <textarea name="item-notes" placeholder="Notes" style="width:100%;min-height:60px;margin-top:4px;"></textarea>
                         <button type="submit">Add</button>
                     </form>
                     <form id="subitem-form" action="/create_subitem" method="post" style="flex:1;min-width:220px;max-width:260px;">
@@ -298,6 +341,7 @@
                             <option value="{{ item.id }}">{{ item.title }}</option>
                             {% endfor %}
                         </select>
+                                            <textarea name="subitem-notes" placeholder="Notes" style="width:100%;min-height:60px;margin-top:4px;"></textarea>
                         <button type="submit">Add</button>
                     </form>
                 </div>
@@ -316,7 +360,7 @@
                     </style>
                     {% for project in projects %}
                     <div class="project-block" style="margin-bottom:0.75em;">
-                        <div class="node-line">
+                        <div class="node-line assoc-node" data-type="project" data-id="{{ project.id }}">
                             <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
                             <strong>{{ project.title }}</strong>
                             <span class="meta">({{ project.phases|length }} phases)</span>
@@ -338,9 +382,10 @@
                         <div class="tree-children">
                             {% for phase in project.phases %}
                             <div style="margin:4px 0;">
-                                <div class="node-line">
+                                <div class="node-line assoc-node" data-type="phase" data-id="{{ phase.id }}">
                                     <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
                                     <strong>Phase:</strong> {{ phase.title }} <span class="meta">{{ phase.start_date }} / {{ phase.duration }}d</span>
+                                                                        {% if phase.notes %}<span title="{{ phase.notes|e }}" style="color:#FF8200;font-size:0.75em;margin-left:6px;">📝</span>{% endif %}
                                     <span class="actions">
                                         <form method="post" action="/delete_phase/{{ phase.id }}" style="display:inline;" onsubmit="return confirm('Delete phase?');"><button type="submit" style="color:red;">Del</button></form>
                                         <button type="button" class="small" onclick="toggleEdit('phase-edit-{{ phase.id }}')">Edit</button>
@@ -356,6 +401,7 @@
                                             <option value="internal" {% if phase.internal_external=='internal' %}selected{% endif %}>Int</option>
                                             <option value="external" {% if phase.internal_external=='external' %}selected{% endif %}>Ext</option>
                                         </select>
+                                                                            <textarea name="phase-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ phase.notes or '' }}</textarea>
                                         <button type="submit">Save</button>
                                         <button type="button" onclick="toggleEdit('phase-edit-{{ phase.id }}')">Cancel</button>
                                     </form>
@@ -363,9 +409,10 @@
                                 <div class="tree-children">
                                     {% for item in phase.items %}
                                     <div style="margin:2px 0;">
-                                        <div class="node-line">
+                                        <div class="node-line assoc-node" data-type="item" data-id="{{ item.id }}">
                                             <span class="tree-toggle" onclick="toggleNode(this)">[–]</span>
                                             <strong>Item:</strong> {{ item.title }} <span class="meta">{{ item.start_date }} / {{ item.duration }}d</span>
+                                                                                        {% if item.notes %}<span title="{{ item.notes|e }}" style="color:#FF8200;font-size:0.7em;margin-left:4px;">📝</span>{% endif %}
                                             <span class="actions">
                                                 <form method="post" action="/delete_item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Delete item?');"><button type="submit" style="color:red;">Del</button></form>
                                                 <button type="button" class="small" onclick="toggleEdit('item-edit-{{ item.id }}')">Edit</button>
@@ -382,6 +429,7 @@
                                                     <option value="internal" {% if item.internal_external=='internal' %}selected{% endif %}>Int</option>
                                                     <option value="external" {% if item.internal_external=='external' %}selected{% endif %}>Ext</option>
                                                 </select>
+                                                                                            <textarea name="item-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ item.notes or '' }}</textarea>
                                                 <button type="submit">Save</button>
                                                 <button type="button" onclick="toggleEdit('item-edit-{{ item.id }}')">Cancel</button>
                                             </form>
@@ -389,8 +437,9 @@
                                         <div class="tree-children">
                                             {% for subitem in item.subitems %}
                                             <div style="margin:2px 0;">
-                                                <div class="node-line">
+                                                <div class="node-line assoc-node" data-type="subitem" data-id="{{ subitem.id }}">
                                                     <strong>Sub:</strong> {{ subitem.title }} <span class="meta">{{ subitem.start_date }} / {{ subitem.duration }}d</span>
+                                                                                                        {% if subitem.notes %}<span title="{{ subitem.notes|e }}" style="color:#FF8200;font-size:0.65em;margin-left:4px;">📝</span>{% endif %}
                                                     <span class="actions">
                                                         <form method="post" action="/delete_subitem/{{ subitem.id }}" style="display:inline;" onsubmit="return confirm('Delete sub-item?');"><button type="submit" style="color:red;">Del</button></form>
                                                         <button type="button" class="small" onclick="toggleEdit('subitem-edit-{{ subitem.id }}')">Edit</button>
@@ -407,6 +456,7 @@
                                                             <option value="internal" {% if subitem.internal_external=='internal' %}selected{% endif %}>Int</option>
                                                             <option value="external" {% if subitem.internal_external=='external' %}selected{% endif %}>Ext</option>
                                                         </select>
+                                                                                                            <textarea name="subitem-notes" placeholder="Notes" style="flex:1 1 100%;min-height:50px;">{{ subitem.notes or '' }}</textarea>
                                                         <button type="submit">Save</button>
                                                         <button type="button" onclick="toggleEdit('subitem-edit-{{ subitem.id }}')">Cancel</button>
                                                     </form>
@@ -438,6 +488,8 @@
                 </script>
                 <!-- Hidden Gantt data for script parsing -->
                 <script id="gantt-data" type="application/json">{{ gantt_json_js|safe }}</script>
+                <script id="cp-data" type="application/json">{{ critical_path_ids | tojson }}</script>
+                <script id="calendar-events-data" type="application/json">{{ calendar_events_json|safe }}</script>
                 <!-- Removed duplicate Gantt Chart container -->
 <script>
 function getGanttTasks() {
@@ -448,230 +500,172 @@ function getGanttTasks() {
         return [];
     }
 }
-function renderGantt() {
-    var ganttTasks = getGanttTasks();
-    console.log('Gantt tasks:', ganttTasks);
-    try {
-        console.log('Gantt constructor:', typeof Gantt);
-    } catch (e) {
-        console.error('Gantt not defined:', e);
-    }
-    if (!ganttTasks || ganttTasks.length === 0) {
-        document.getElementById('gantt-chart').innerHTML = '<p style="text-align:center;line-height:400px;">No tasks to display</p>';
+function renderGantt(){
+    var tasks = getGanttTasks();
+    if(!tasks || !tasks.length){
+        document.getElementById('gantt-chart').innerHTML='<p style="text-align:center;line-height:400px;">No tasks to display</p>';
+        var cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent='None';
         return;
     }
-    if (typeof Gantt !== 'function') {
-        document.getElementById('gantt-chart').innerHTML = '<p style="color:red;text-align:center;">Gantt library not loaded</p>';
+    if(typeof Gantt !== 'function'){
+        document.getElementById('gantt-chart').innerHTML='<p style="color:red;text-align:center;">Gantt library not loaded</p>';
         return;
     }
-    var gantt = new Gantt("#gantt-chart", ganttTasks, {
-        view_mode: 'Day',
-        custom_popup_html: null,
-        on_date_change: function(task, start, end) {
-            // Send AJAX request to update start/end in backend
-            fetch('/update_gantt_task', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    id: task.id,
-                    start: start.toISOString().slice(0,10),
-                    end: end.toISOString().slice(0,10)
-                })
-            }).then(res => {
-                if(res.ok) {
-                    alert('Task updated!');
-                } else {
-                    alert('Error updating task.');
+    // Backend already annotated critical path classes. Use provided list to show sequence.
+    var cpProvided = (function(){ try { return JSON.parse(document.getElementById('cp-data').textContent)||[]; } catch(e){ return []; } })();
+    var cpEl=document.getElementById('critical-path-list'); if(cpEl) cpEl.textContent = cpProvided.length? cpProvided.join(' → ') : 'None';
+    new Gantt('#gantt-chart', tasks, {
+        view_mode:'Day',
+        bar_height:24,
+        custom_popup_html:null,
+        on_click:function(task){
+            try {
+                if(!task || !task.id) return;
+                let type = null; let rawId = null;
+                if(task.id.startsWith('phase-')) { type='phase'; rawId=parseInt(task.id.replace('phase-','')); }
+                else if(task.id.startsWith('item-')) { type='item'; rawId=parseInt(task.id.replace('item-','')); }
+                else if(task.id.startsWith('subitem-')) { type='subitem'; rawId=parseInt(task.id.replace('subitem-','')); }
+                if(type && !isNaN(rawId)) {
+                    // highlight matching hierarchy node
+                    document.querySelectorAll('.assoc-node.selected-node').forEach(n=> n.classList.remove('selected-node'));
+                    const node = document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rawId}"]`);
+                    if(node) node.classList.add('selected-node');
+                    loadAssociatedThumbnails(type, rawId);
                 }
-            });
+            } catch(e){ console.error('Gantt click handler error', e); }
+        },
+    on_date_change:function(task,start,end){
+            const s = start.toISOString().slice(0,10);
+            const e = end.toISOString().slice(0,10);
+            fetch('/update_gantt_task',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({id:task.id,start:s,end:e})
+            }).then(r=> r.json().then(j=>({ok:r.ok,data:j})))
+            .then(resp=>{
+                if(!resp.ok){ alert('Error updating task'); return; }
+                // Update hierarchy node text (dates/duration)
+                try {
+                    let nodeSel = null;
+                    if(task.id.startsWith('phase-')) nodeSel = `.assoc-node[data-type="phase"][data-id="${task.id.replace('phase-','')}"]`;
+                    else if(task.id.startsWith('item-')) nodeSel = `.assoc-node[data-type="item"][data-id="${task.id.replace('item-','')}"]`;
+                    else if(task.id.startsWith('subitem-')) nodeSel = `.assoc-node[data-type="subitem"][data-id="${task.id.replace('subitem-','')}"]`;
+                    if(nodeSel){
+                        const node = document.querySelector(nodeSel);
+                        if(node){
+                            const meta = node.querySelector('.meta');
+                            if(meta){ meta.textContent = `${s} / ${resp.data.duration}d`; }
+                        }
+                    }
+                    // Update calendar event if present
+                    if(window._calendarInstance){
+                        const evt = window._calendarInstance.getEventById(task.id);
+                        if(evt){
+                            evt.setStart(s);
+                            // FullCalendar is exclusive end; supply end date +1 day for proper span if multi-day
+                            const endObj = new Date(e);
+                            endObj.setDate(endObj.getDate()+1);
+                            evt.setEnd(endObj.toISOString().slice(0,10));
+                        }
+                    }
+                    // Update timeline (rebuild lightweight)
+                    try { refreshTimeline(); } catch(err) { /* ignore */ }
+                    // Re-highlight critical path bars
+                    if(resp.data.critical_path){
+                        // Remove existing critical-path class first
+                        document.querySelectorAll('.gantt .bar.critical-path').forEach(b=> b.classList.remove('critical-path'));
+                        resp.data.critical_path.forEach(id=>{
+                            const bar = document.querySelector(`.gantt .bar[data-id="${id}"]`);
+                            if(bar) bar.classList.add('critical-path');
+                        });
+                        const cpEl = document.getElementById('critical-path-list');
+                        if(cpEl) cpEl.textContent = resp.data.critical_path.join(' → ');
+                    }
+                    applyHierarchyVisuals();
+                    // If backend cascaded dependent tasks, force a quick re-render to reflect updated dates
+                    if(resp.data.cascade && resp.data.cascade.length){
+                        // Simple strategy: reload full page to refresh gantt-data JSON (keeps logic simple)
+                        setTimeout(()=>{ window.location.reload(); }, 300);
+                    }
+                } catch(err){ console.error('Propagation error', err); }
+            }).catch(()=> alert('Network error updating task'));
         }
     });
+    applyHierarchyVisuals();
+    enforceBarColors();
+    setTimeout(addLaneBands, 0); // draw subtle category bands after initial render
 }
-document.addEventListener('DOMContentLoaded', function() {
-    renderGantt();
-});
+document.addEventListener('DOMContentLoaded', function() { renderGantt(); });
 /* Removed incomplete window.showView assignment to fix syntax error */
 </script>
-                    </div>
-                    <div id="calendar-view" style="display:none;">
-                            <h3>Calendar View</h3>
-                            <div id="calendar-chart" style="height:400px;"></div>
-                            <div id="calendar-empty-message" style="display:none;text-align:center;line-height:400px;color:#888;font-size:1.2em;">No events to display</div>
-                                                <!-- Edit Event Modal -->
-                                                <div class="modal fade" id="editEventModal" tabindex="-1" role="dialog" aria-labelledby="editEventModalLabel" aria-hidden="true">
-                                                    <div class="modal-dialog" role="document">
-                                                        <div class="modal-content">
-                                                            <div class="modal-header">
-                                                                <h5 class="modal-title" id="editEventModalLabel">Edit Event</h5>
-                                                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                                                                    <span aria-hidden="true">&times;</span>
-                                                                </button>
-                                                            </div>
-                                                            <div class="modal-body">
-                                                                <form id="editEventForm">
-                                                                    <div class="form-group">
-                                                                        <label for="eventTitle">Title</label>
-                                                                        <input type="text" class="form-control" id="eventTitle" name="eventTitle">
-                                                                    </div>
-                                                                    <div class="form-group">
-                                                                        <label for="eventStart">Start Date</label>
-                                                                        <input type="date" class="form-control" id="eventStart" name="eventStart">
-                                                                    </div>
-                                                                    <div class="form-group">
-                                                                        <label for="eventEnd">End Date</label>
-                                                                        <input type="date" class="form-control" id="eventEnd" name="eventEnd">
-                                                                    </div>
-                                                                    <input type="hidden" id="eventId" name="eventId">
-                                                                </form>
-                                                            </div>
-                                                            <div class="modal-footer">
-                                                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                                                                <button type="button" class="btn btn-primary" id="saveEventBtn">Save changes</button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css">
-                                                <style>
-                                                /* Darken FullCalendar grid and text */
-                                                .fc .fc-col-header-cell, .fc .fc-daygrid-day-number, .fc .fc-daygrid-day {
-                                                    color: #222 !important;
-                                                }
-                                                .fc .fc-daygrid-day-frame {
-                                                    background: #fff !important;
-                                                    border-color: #bbb !important;
-                                                }
-                                                .fc .fc-scrollgrid, .fc .fc-scrollgrid-section {
-                                                    border-color: #888 !important;
-                                                }
-                                                .fc .fc-toolbar-title {
-                                                    color: #222 !important;
-                                                }
-                                                </style>
-                                                <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
-                                                <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-                                                <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
-                                                <script>
-                                                var calendarEvents = JSON.parse('{{ calendar_events_json|safe }}').map(function(e){
-                                                    // Ensure each event has an id for reliable editing
-                                                    if(!e.id){
-                                                        if(e.title.startsWith('Phase: ')) e.id = 'phase-' + e.title.replace('Phase: ','').replace(/\s+/g,'-');
-                                                        else if(e.title.startsWith('Item: ')) e.id = 'item-' + e.title.replace('Item: ','').replace(/\s+/g,'-');
-                                                        else e.id = 'evt-' + btoa(e.title).replace(/=/g,'');
-                                                    }
-                                                    return e;
-                                                });
-                                                document.addEventListener('DOMContentLoaded', function() {
-                                                        var calendarEl = document.getElementById('calendar-chart');
-                                                        if (!calendarEl) return;
-                                                        window._calendarInstance = new FullCalendar.Calendar(calendarEl, {
-                                                                initialView: 'dayGridMonth',
-                                                                selectable: true,
-                                                                editable: true,
-                                                                height: 420,
-                                                                events: calendarEvents,
-                                                                select: function(selInfo){
-                                                                    // Prefill modal for new event
-                                                                    document.getElementById('eventTitle').value = '';
-                                                                    document.getElementById('eventStart').value = selInfo.startStr.slice(0,10);
-                                                                    // FullCalendar's exclusive end for allDay selection: subtract one day if provided
-                                                                    var endStr = selInfo.end ? new Date(selInfo.end.getTime()-86400000).toISOString().slice(0,10) : selInfo.startStr.slice(0,10);
-                                                                    document.getElementById('eventEnd').value = endStr;
-                                                                    document.getElementById('eventId').value = '';
-                                                                    window.currentCalendarEvent = null; // indicates new
-                                                                    $('#editEventModal').modal('show');
-                                                                },
-                                                                eventClick: function(info) {
-                                                                    var event = info.event;
-                                                                    document.getElementById('eventTitle').value = event.title;
-                                                                    document.getElementById('eventStart').value = event.startStr.slice(0,10);
-                                                                    document.getElementById('eventEnd').value = event.endStr ? event.endStr.slice(0,10) : event.startStr.slice(0,10);
-                                                                    if (event.id) {
-                                                                        document.getElementById('eventId').value = event.id;
-                                                                    } else {
-                                                                        if (event.title.startsWith('Phase: ')) {
-                                                                            document.getElementById('eventId').value = 'phase-' + event.title.replace('Phase: ', '').split(' ')[0];
-                                                                        } else if (event.title.startsWith('Item: ')) {
-                                                                            document.getElementById('eventId').value = 'item-' + event.title.replace('Item: ', '').split(' ')[0];
-                                                                        } else {
-                                                                            document.getElementById('eventId').value = event.title;
-                                                                        }
-                                                                    }
-                                                                    $('#editEventModal').modal('show');
-                                                                    window.currentCalendarEvent = event;
-                                                                },
-                                                                eventDrop: function(info) {
-                                                                    var event = info.event;
-                                                                    var id = document.getElementById('eventId').value || event.id || event.title;
-                                                                    fetch('/update_gantt_task', {
-                                                                        method: 'POST',
-                                                                        headers: {
-                                                                            'Content-Type': 'application/json'
-                                                                        },
-                                                                        body: JSON.stringify({
-                                                                            id: id,
-                                                                            start: event.startStr,
-                                                                            end: event.endStr || event.startStr
-                                                                        })
-                                                                    }).then(function(res) {
-                                                                        if(res.ok) {
-                                                                            location.reload();
-                                                                        } else {
-                                                                            alert('Error updating event.');
-                                                                        }
-                                                                    });
-                                                                },
-                                                                eventResize: function(info){
-                                                                    var event = info.event;
-                                                                    var id = event.id;
-                                                                    fetch('/update_gantt_task', {
-                                                                        method: 'POST',
-                                                                        headers: { 'Content-Type': 'application/json' },
-                                                                        body: JSON.stringify({
-                                                                            id: id,
-                                                                            start: event.startStr,
-                                                                            end: event.endStr || event.startStr
-                                                                        })
-                                                                    }).then(r=>{ if(!r.ok) alert('Resize failed'); });
-                                                                }
-                                                            });
-                                                        // Show empty message if no events
-                                                        if(calendarEvents.length === 0) {
-                                                            document.getElementById('calendar-chart').style.display = 'none';
-                                                            var emptyMsg = document.getElementById('calendar-empty-message');
-                                                            if (emptyMsg) emptyMsg.style.display = 'block';
-                                                        } else {
-                                                            window._calendarInstance.render();
+<script>
+function addLaneBands(){
+                        const svg = document.querySelector('#gantt-chart svg');
+                        if(!svg) return;
+                        // Remove existing bands
+                        svg.querySelectorAll('rect[data-cat-band]').forEach(r=>r.remove());
+                        const wrappers = Array.from(svg.querySelectorAll('.bar-wrapper'));
+                        if(!wrappers.length) return;
+                        const catYs = { phase: [], item: [], subitem: [] };
+                        wrappers.forEach(w=>{
+                            const rect = w.querySelector('rect.bar'); if(!rect) return;
+                            const classes = (w.getAttribute('class') + ' ' + rect.getAttribute('class'));
+                            let cat='subitem';
+                            if(/phase-bar/.test(classes)) cat='phase'; else if(/item-bar/.test(classes) && !/phase-bar/.test(classes)) cat='item';
+                            const m = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(w.getAttribute('transform')||'');
+                            if(m) catYs[cat].push(parseFloat(m[2]));
+                        });
+                        const width = (svg.viewBox && svg.viewBox.baseVal)? svg.viewBox.baseVal.width : (svg.getAttribute('width')||1200);
+                        const colors = { phase: 'rgba(255,130,0,0.05)', item: 'rgba(75,75,75,0.06)', subitem: 'rgba(0,0,0,0.04)' };
+                        Object.keys(catYs).forEach(cat=>{
+                            if(!catYs[cat].length) return;
+                            catYs[cat].sort((a,b)=>a-b);
+                            const minY = catYs[cat][0]-2;
+                            const maxY = catYs[cat][catYs[cat].length-1] + 22; // approximate row area
+                            const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                            r.setAttribute('x','0'); r.setAttribute('y', String(minY));
+                            r.setAttribute('width', width); r.setAttribute('height', String(maxY-minY));
+                            r.setAttribute('fill', colors[cat]); r.setAttribute('data-cat-band', cat);
+                            svg.insertBefore(r, svg.firstChild);
+                        });
+}
+                                                (function(){
+                                                    try {
+                                                        var raw = document.getElementById('calendar-events-data');
+                                                        if(raw){ calendarEvents = JSON.parse(raw.textContent || '[]'); }
+                                                    } catch(e){ console.error('Calendar JSON parse error', e); calendarEvents=[]; }
+                                                    calendarEvents = calendarEvents.map(function(e){
+                                                        if(!e.id){
+                                                            if(e.title && e.title.startsWith('Phase: ')) e.id = 'phase-' + e.title.replace('Phase: ','').replace(/\s+/g,'-');
+                                                            else if(e.title && e.title.startsWith('Item: ')) e.id = 'item-' + e.title.replace('Item: ','').replace(/\s+/g,'-');
+                                                            else if(e.title) e.id='evt-'+btoa(e.title).replace(/=/g,'');
                                                         }
-                                                        document.getElementById('saveEventBtn').onclick = function() {
-                                                            var event = window.currentCalendarEvent;
-                                                            var newTitle = document.getElementById('eventTitle').value;
-                                                            var newStart = document.getElementById('eventStart').value;
-                                                            var newEnd = document.getElementById('eventEnd').value || newStart;
-                                                            if(event){
-                                                                var id = event.id;
-                                                                // Update existing
-                                                                event.setProp('title', newTitle);
-                                                                event.setStart(newStart);
-                                                                event.setEnd(newEnd);
-                                                                fetch('/update_gantt_task', {
-                                                                    method: 'POST',
-                                                                    headers: { 'Content-Type': 'application/json' },
-                                                                    body: JSON.stringify({ id: id, start: newStart, end: newEnd, title:newTitle })
-                                                                }).then(res => { if(!res.ok) alert('Error updating event'); else $('#editEventModal').modal('hide'); });
-                                                            } else {
-                                                                // Create a new ad-hoc event only in UI (not persisted if no id pattern)
-                                                                var tempId = newTitle.startsWith('Phase: ')? 'phase-' + newTitle.replace('Phase: ','').replace(/\s+/g,'-') : newTitle.startsWith('Item: ')? 'item-' + newTitle.replace('Item: ','').replace(/\s+/g,'-') : 'evt-' + Date.now();
-                                                                window._calendarInstance.addEvent({ id: tempId, title:newTitle, start:newStart, end:newEnd, color: newTitle.startsWith('Phase: ')? '#FF8200':'#4B4B4B' });
-                                                                $('#editEventModal').modal('hide');
-                                                            }
-                                                            document.getElementById('eventId').value='';
-                                                            window.currentCalendarEvent=null;
-                            };
-                        }); // Close DOMContentLoaded listener
-                </script>
+                                                        return e;
+                                                    });
+                                                })();
+                                                /* Removed laneLayout; using background bands only */
+                                                    if(calendarEvents.length===0){
+                                                        document.getElementById('calendar-chart').style.display='none';
+                                                        var emptyMsg=document.getElementById('calendar-empty-message'); if(emptyMsg) emptyMsg.style.display='block';
+                                                    } else {
+                                                        window._calendarInstance.render();
+                                                    }
+                                                    document.getElementById('saveEventBtn').onclick = function(){
+                                                        var event=window.currentCalendarEvent;
+                                                        var newTitle=document.getElementById('eventTitle').value;
+                                                        var newStart=document.getElementById('eventStart').value;
+                                                        var newEnd=document.getElementById('eventEnd').value || newStart;
+                                                        if(event){
+                                                            event.setProp('title', newTitle); event.setStart(newStart); event.setEnd(newEnd);
+                                                            fetch('/update_gantt_task',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:event.id,start:newStart,end:newEnd,title:newTitle})}).then(r=>{ if(!r.ok) alert('Update failed'); else $('#editEventModal').modal('hide'); });
+                                                        } else {
+                                                            var tempId = newTitle.startsWith('Phase: ')? 'phase-'+newTitle.replace('Phase: ','').replace(/\s+/g,'-') : newTitle.startsWith('Item: ')? 'item-'+newTitle.replace('Item: ','').replace(/\s+/g,'-') : 'evt-'+Date.now();
+                                                            if(window._calendarInstance){ window._calendarInstance.addEvent({ id:tempId, title:newTitle, start:newStart, end:newEnd, color:newTitle.startsWith('Phase: ')? '#FF8200':'#4B4B4B'}); }
+                                                            $('#editEventModal').modal('hide');
+                                                        }
+                                                        document.getElementById('eventId').value=''; window.currentCalendarEvent=null;
+                                                    };
+                                                </script>
             </div>
                     </div>
                 </div>
@@ -693,8 +687,35 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('calendar-view').style.display = 'none';
             document.getElementById('timeline-view').style.display = 'none';
             if(view === 'gantt') document.getElementById('gantt-view').style.display = 'block';
-            if(view === 'calendar') document.getElementById('calendar-view').style.display = 'block';
-            if(view === 'timeline') document.getElementById('timeline-view').style.display = 'block';
+            if(view === 'calendar') { document.getElementById('calendar-view').style.display = 'block'; initCalendar(); }
+            if(view === 'timeline') { document.getElementById('timeline-view').style.display = 'block'; initTimeline(); }
+        }
+        function initCalendar(){
+            if(window._calendarInstance) return; // already initialized
+            const el = document.getElementById('calendar-chart');
+            if(!el) return;
+            let events=[];
+            try { const raw=document.getElementById('calendar-events-data'); if(raw) events=JSON.parse(raw.textContent||'[]'); } catch(e) { console.error('Calendar data parse failed', e); }
+            if(typeof FullCalendar === 'undefined'){ console.warn('FullCalendar not loaded'); return; }
+            window._calendarInstance = new FullCalendar.Calendar(el, {
+                initialView: 'dayGridMonth',
+                height: 'auto',
+                selectable: true,
+                events: events,
+                eventClick: function(info){
+                    window.currentCalendarEvent = info.event;
+                    // simple modal reuse if exists
+                    const titleEl = document.getElementById('eventTitle');
+                    const startEl = document.getElementById('eventStart');
+                    const endEl = document.getElementById('eventEnd');
+                    if(titleEl) titleEl.value = info.event.title;
+                    if(startEl) startEl.value = info.event.startStr.slice(0,10);
+                    if(endEl) endEl.value = (info.event.endStr||info.event.startStr).slice(0,10);
+                    const idEl = document.getElementById('eventId'); if(idEl) idEl.value = info.event.id;
+                    if(window.$){ $('#editEventModal').modal('show'); }
+                }
+            });
+            window._calendarInstance.render();
         }
         // Image viewer logic
         function showFullImage(src) {
@@ -720,7 +741,7 @@ document.addEventListener('DOMContentLoaded', function() {
             cont.classList.add('empty');
         }
         // --- Image viewer resize logic ---
-        (function(){
+    (function(){
             const panel = document.getElementById('image-viewer-panel');
             const handle = document.getElementById('viewer-resize-handle');
             if(!panel || !handle) return;
@@ -765,6 +786,276 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             function stopTouch(){ dragging=false; document.documentElement.classList.remove('resizing'); window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', stopTouch); }
         })();
+        // --- Dynamic Image Associations ---
+        let ALL_IMAGES = [];
+        let STRUCTURE = {phases:[],items:[],subitems:[]};
+        (function(){
+            try { ALL_IMAGES = JSON.parse(document.getElementById('all-images-data').textContent)||[]; } catch(e){ ALL_IMAGES=[]; }
+            try { STRUCTURE = JSON.parse(document.getElementById('structure-data').textContent)||STRUCTURE; } catch(e){}
+        })();
+        function loadAssociatedThumbnails(type, id){
+            const thumbWrap = document.getElementById('image-viewer-thumbnails');
+            if(!thumbWrap) return;
+            thumbWrap.innerHTML='';
+            let filtered = [];
+            if(type==='phase') filtered = ALL_IMAGES.filter(i=>i.phase_id===id);
+            else if(type==='item') filtered = ALL_IMAGES.filter(i=>i.item_id===id);
+            else if(type==='subitem') filtered = ALL_IMAGES.filter(i=>i.subitem_id===id);
+            else if(type==='project') {
+                const phaseIds = STRUCTURE.phases.filter(p=>p.project_id===id).map(p=>p.id);
+                const itemIds = STRUCTURE.items.filter(it=> phaseIds.includes(it.phase_id)).map(it=>it.id);
+                const subIds = STRUCTURE.subitems.filter(si=> itemIds.includes(si.item_id)).map(si=>si.id);
+                filtered = ALL_IMAGES.filter(i=> (i.phase_id && phaseIds.includes(i.phase_id)) || (i.item_id && itemIds.includes(i.item_id)) || (i.subitem_id && subIds.includes(i.subitem_id)) );
+            } else filtered = [];
+            if(filtered.length===0){ hideFullImage(); const ph=document.getElementById('placeholder-text'); if(ph) ph.textContent='No images associated.'; return; }
+            filtered.forEach(img=>{
+                const div=document.createElement('div');
+                div.style.cssText='display:inline-block;position:relative;';
+                const el=document.createElement('img');
+                el.src=img.url; el.title=img.filename; el.className='thumbnail';
+                el.onclick=()=>showFullImage(img.url);
+                div.appendChild(el);
+                thumbWrap.appendChild(div);
+            });
+            showFullImage(filtered[0].url);
+        }
+        document.addEventListener('click', function(e){
+            const nodeLine = e.target.closest('.assoc-node');
+            if(!nodeLine) return;
+            if(e.target.classList.contains('tree-toggle') || e.target.closest('.actions') || e.target.closest('form')) return; // ignore control clicks
+            const type=nodeLine.getAttribute('data-type');
+            const id=parseInt(nodeLine.getAttribute('data-id'));
+            document.querySelectorAll('.assoc-node.selected-node').forEach(n=> n.classList.remove('selected-node'));
+            nodeLine.classList.add('selected-node');
+            if(['project','phase','item','subitem'].includes(type)) loadAssociatedThumbnails(type, id);
+        });
+        // --- Simple Timeline Initialization (client-side derived from gantt data) ---
+        function initTimeline(){
+            if(window._timelineInit) return; // run once
+            var list = document.getElementById('timeline-list');
+            if(!list) return;
+            var tasks = [];
+            try { tasks = getGanttTasks(); } catch(e){ tasks=[]; }
+            if(!tasks || !tasks.length){
+                list.innerHTML = '<li style="color:#999;">No timeline data.</li>';
+                window._timelineInit = true; return;
+            }
+            // Normalize tasks -> only take phases & items for simplified timeline
+            var filtered = tasks.filter(t=>/^(phase|item)/i.test(t.id));
+            // Sort by start date
+            filtered.sort(function(a,b){ return new Date(a.start) - new Date(b.start); });
+            var minDate = new Date(filtered[0].start);
+            var maxDate = filtered.reduce((mx,t)=>{ var d=new Date(t.end||t.start); return d>mx?d:mx; }, new Date(filtered[0].end||filtered[0].start));
+            var rangeMs = maxDate - minDate || 1;
+            filtered.forEach(function(t){
+                var start = new Date(t.start);
+                var end = new Date(t.end||t.start);
+                var leftPct = ((start - minDate)/rangeMs)*100;
+                var widthPct = Math.max(2, ((end - start)|| (24*60*60*1000))/rangeMs*100);
+                var li = document.createElement('li');
+                li.style.position='relative';
+                li.style.flex='0 0 auto';
+                li.style.width = Math.max(80, widthPct*5) + 'px';
+                li.style.minWidth='80px';
+                li.style.marginLeft = leftPct + '%';
+                li.style.background = t.id.startsWith('phase')? '#FF8200' : '#4B4B4B';
+                li.style.color = '#fff';
+                li.style.padding='6px 8px';
+                li.style.borderRadius='8px';
+                li.style.boxShadow='0 2px 6px rgba(0,0,0,0.15)';
+                li.innerHTML = '<strong style="font-size:12px;">'+(t.name||t.id)+'</strong><br><span style="font-size:11px;opacity:.85;">'+t.start+' -> '+(t.end||t.start)+'</span>';
+                list.appendChild(li);
+            });
+            window._timelineInit = true;
+        }
+        function refreshTimeline(){
+            const list = document.getElementById('timeline-list');
+            if(!list) return;
+            list.innerHTML='';
+            let tasks = [];
+            try { tasks = getGanttTasks(); } catch(e){ tasks=[]; }
+            if(!tasks.length){ list.innerHTML='<li style="color:#999;">No timeline data.</li>'; return; }
+            var filtered = tasks.filter(t=>/^(phase|item)/i.test(t.id));
+            // Re-read actual dates from hierarchy for accuracy
+            filtered.forEach(t=>{
+                const type = t.id.split('-')[0];
+                const rawId = t.id.split('-')[1];
+                const node = document.querySelector(`.assoc-node[data-type="${type}"][data-id="${rawId}"] .meta`);
+                if(node){
+                    const parts = node.textContent.split('/');
+                    if(parts.length===2){
+                        const start = parts[0].trim();
+                        const dur = parseInt(parts[1]);
+                        if(/\d{4}-\d{2}-\d{2}/.test(start) && !isNaN(dur)){
+                            const d1 = new Date(start);
+                            const d2 = new Date(d1.getTime()+dur*86400000);
+                            t.start = start;
+                            t.end = d2.toISOString().slice(0,10);
+                        }
+                    }
+                    // Add grouping bands and indentation to labels
+                    function applyHierarchyVisuals(){
+                        const svg = document.querySelector('#gantt-chart svg');
+                        if(!svg) return;
+                        const barGroups = Array.from(svg.querySelectorAll('.bar-wrapper'));
+                        // Map id -> wrapper
+                        const wrappers = {};
+                        barGroups.forEach(w=>{
+                            const rect = w.querySelector('.bar');
+                            if(rect){
+                                const id = rect.getAttribute('data-id');
+                                if(id) wrappers[id]=w;
+                            }
+                        });
+                        // Insert group bands behind items belonging to each phase
+                        const phaseIds = Object.keys(wrappers).filter(id=>id.startsWith('phase-'));
+                        phaseIds.forEach(pid=>{
+                            const phaseWrapper = wrappers[pid];
+                            if(!phaseWrapper) return;
+                            // find child items
+                            const phaseNum = pid.replace('phase-','');
+                            const itemIds = Object.keys(wrappers).filter(id=>id.startsWith('item-'))
+                                .filter(iid=> {
+                                    // match items whose original name contains Phase: title? (heuristic: rely on DOM ordering)
+                                    return true; // fallback: we band from phase bar down until next phase
+                                });
+                            // Determine vertical span: from phase bar y to before next phase bar
+                            const phaseRect = phaseWrapper.querySelector('rect.bar');
+                            if(!phaseRect) return;
+                            const y = parseFloat(phaseRect.getAttribute('y'));
+                            // Find next phase y to cap
+                            let nextY = null;
+                            phaseIds.sort((a,b)=>{
+                                const ra = wrappers[a].querySelector('rect.bar');
+                                const rb = wrappers[b].querySelector('rect.bar');
+                                return parseFloat(ra.getAttribute('y')) - parseFloat(rb.getAttribute('y'));
+                            });
+                            for(let i=0;i<phaseIds.length;i++){
+                                if(phaseIds[i]===pid && i<phaseIds.length-1){
+                                    const nr = wrappers[phaseIds[i+1]].querySelector('rect.bar');
+                                    nextY = parseFloat(nr.getAttribute('y')); break;
+                                }
+                            }
+                            const height = (nextY? nextY : (y+24+ (itemIds.length*24))) - y; // approximate
+                            // draw band if not present
+                            if(!svg.querySelector(`rect[data-band="${pid}"]`)){
+                                const band = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                                band.setAttribute('x','0');
+                                band.setAttribute('y', String(y));
+                                band.setAttribute('width','100%');
+                                band.setAttribute('height', String(height));
+                                band.setAttribute('class','phase-group-band');
+                                band.setAttribute('data-band', pid);
+                                svg.insertBefore(band, svg.firstChild);
+                            }
+                        });
+                        // Indent labels: text elements have class .bar-label usually sibling; adjust dx based on type
+                        svg.querySelectorAll('.bar-group').forEach(g=>{
+                            const rect = g.querySelector('.bar');
+                            const text = g.querySelector('text');
+                            if(rect && text){
+                                if(rect.classList.contains('item-bar')){
+                                    text.setAttribute('dx','12');
+                                } else if(rect.classList.contains('subitem-bar')){
+                                    text.setAttribute('dx','24');
+                                } else {
+                                    text.setAttribute('dx','4');
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+            filtered.sort(function(a,b){ return new Date(a.start) - new Date(b.start); });
+            var minDate = new Date(filtered[0].start);
+            var maxDate = filtered.reduce((mx,t)=>{ var d=new Date(t.end||t.start); return d>mx?d:mx; }, new Date(filtered[0].end||filtered[0].start));
+            var rangeMs = maxDate - minDate || 1;
+            filtered.forEach(function(t){
+                var start = new Date(t.start);
+                var end = new Date(t.end||t.start);
+                var leftPct = ((start - minDate)/rangeMs)*100;
+                var widthPct = Math.max(2, ((end - start)|| (24*60*60*1000))/rangeMs*100);
+                var li = document.createElement('li');
+                li.style.position='relative';
+                li.style.flex='0 0 auto';
+                li.style.width = Math.max(80, widthPct*5) + 'px';
+                li.style.minWidth='80px';
+                li.style.marginLeft = leftPct + '%';
+                li.style.background = t.id.startsWith('phase')? '#FF8200' : '#4B4B4B';
+                li.style.color = '#fff';
+                li.style.padding='6px 8px';
+                li.style.borderRadius='8px';
+                li.style.boxShadow='0 2px 6px rgba(0,0,0,0.15)';
+                li.innerHTML = '<strong style="font-size:12px;">'+(t.name||t.id)+'</strong><br><span style="font-size:11px;opacity:.85;">'+t.start+' -> '+(t.end||t.start)+'</span>';
+                list.appendChild(li);
+            });
+        }
+        // Hierarchy visuals (bands + label indentation & existing opacity tiers)
+        function applyHierarchyVisuals(){
+            const svg = document.querySelector('#gantt-chart svg');
+            if(!svg) return;
+            const existingBands = svg.querySelectorAll('rect.phase-group-band');
+            existingBands.forEach(b=>b.remove());
+            const wrappers = {};
+            svg.querySelectorAll('.bar-wrapper').forEach(w=>{
+                const rect = w.querySelector('.bar');
+                if(rect){ const id = rect.getAttribute('data-id'); if(id) wrappers[id]=w; }
+            });
+            const phaseIds = Object.keys(wrappers).filter(id=>id.startsWith('phase-')).sort((a,b)=>{
+                const ya = parseFloat(wrappers[a].querySelector('.bar').getAttribute('y'));
+                const yb = parseFloat(wrappers[b].querySelector('.bar').getAttribute('y'));
+                return ya - yb;
+            });
+            phaseIds.forEach((pid, idx)=>{
+                const phaseRect = wrappers[pid].querySelector('.bar');
+                if(!phaseRect) return;
+                const y = parseFloat(phaseRect.getAttribute('y'));
+                let nextY = null;
+                if(idx < phaseIds.length-1){
+                    const nr = wrappers[phaseIds[idx+1]].querySelector('.bar');
+                    if(nr) nextY = parseFloat(nr.getAttribute('y'));
+                }
+                // Determine approximate span: until next phase or +120px fallback
+                const height = (nextY? (nextY - y) : 120);
+                const band = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                band.setAttribute('x','0');
+                band.setAttribute('y', String(y-2));
+                const svgWidth = svg.viewBox && svg.viewBox.baseVal ? svg.viewBox.baseVal.width : (svg.getAttribute('width')||1200);
+                band.setAttribute('width', svgWidth);
+                band.setAttribute('height', String(height+4));
+                band.setAttribute('class','phase-group-band');
+                band.setAttribute('data-band', pid);
+                svg.insertBefore(band, svg.firstChild);
+            });
+            // Indent labels
+            svg.querySelectorAll('.bar-group').forEach(g=>{
+                const rect = g.querySelector('.bar');
+                const text = g.querySelector('text');
+                if(rect && text){
+                    if(rect.classList.contains('item-bar')) text.setAttribute('dx','12');
+                    else if(rect.classList.contains('subitem-bar')) text.setAttribute('dx','24');
+                    else text.setAttribute('dx','4');
+                }
+            });
+        }
+        // Enforce bar colors if classes applied only to wrapper
+        function enforceBarColors(){
+            const svg = document.querySelector('#gantt-chart svg');
+            if(!svg) return;
+            svg.querySelectorAll('.bar-wrapper').forEach(w=>{
+                const rect = w.querySelector('rect.bar');
+                if(!rect) return;
+                const cls = w.getAttribute('class') + ' ' + rect.getAttribute('class');
+                if(/external-bar/.test(cls)){
+                    rect.setAttribute('fill','#4B4B4B');
+                    rect.setAttribute('stroke','#4B4B4B');
+                } else {
+                    rect.setAttribute('fill','#FF8200');
+                    rect.setAttribute('stroke','#FF8200');
+                }
+            });
+        }
+        // (No mutation observer for lane layout to avoid repeated upward shifts)
         function openEditModal(type, id, title, start, duration, milestone, internal_external, dependencies) {
             event.stopPropagation();
             let formHtml = '';

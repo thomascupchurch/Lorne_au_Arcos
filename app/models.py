@@ -27,6 +27,7 @@ class Phase(db.Model):
     is_milestone = db.Column(db.Boolean, default=False)
     internal_external = db.Column(db.String(20), default='internal')
     project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
+    notes = db.Column(db.Text)
     items = db.relationship('Item', backref='phase', lazy=True)
     images = db.relationship('Image', backref='phase', lazy=True)
 
@@ -39,6 +40,7 @@ class Item(db.Model):
     is_milestone = db.Column(db.Boolean, default=False)
     internal_external = db.Column(db.String(20), default='internal')
     phase_id = db.Column(db.Integer, db.ForeignKey('phase.id'), nullable=False)
+    notes = db.Column(db.Text)
     subitems = db.relationship('SubItem', backref='item', lazy=True)
     images = db.relationship('Image', backref='item', lazy=True)
 
@@ -51,6 +53,7 @@ class SubItem(db.Model):
     is_milestone = db.Column(db.Boolean, default=False)
     internal_external = db.Column(db.String(20), default='internal')
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    notes = db.Column(db.Text)
     images = db.relationship('Image', backref='subitem', lazy=True)
 
 class Image(db.Model):

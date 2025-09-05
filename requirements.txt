@@ -1,1 +1,6 @@
 Flask
+Flask-Login
+Flask-SQLAlchemy
+SQLAlchemy
+alembic
+python-dotenv
