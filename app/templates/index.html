@@ -196,10 +196,10 @@
                               <span style="font-size:11px;opacity:.85;">Active: <span id="active-user-chips">{% set others = active_usernames|reject('equalto', current_user.username)|list %}{% if others|length == 0 %}<em style='color:#ccc;'>just you</em>{% else %}{% for u in others %}<span class='active-chip' style='background:#555;color:#fff;padding:2px 6px;border-radius:12px;margin-right:4px;'>{{ u }}</span>{% endfor %}{% endif %}</span></span>
                         </div>
             {% if current_user.is_admin %}
-            <a href="{{ url_for('main.admin_users') }}" style="color:#FF8200;background:#fff;padding:4px 8px;border-radius:6px;text-decoration:none;font-weight:600;">Admin</a>
+            <a href="{{ url_for('admin.users') }}" style="color:#FF8200;background:#fff;padding:4px 8px;border-radius:6px;text-decoration:none;font-weight:600;">Admin</a>
             {% endif %}
-            <a href="{{ url_for('main.change_password') }}" style="color:#fff;text-decoration:none;font-weight:600;">Password</a>
-            <a href="{{ url_for('main.logout') }}" style="color:#FF8200;background:#fff;padding:4px 8px;border-radius:6px;text-decoration:none;font-weight:600;">Logout</a>
+            <a href="{{ url_for('auth.change_password') }}" style="color:#fff;text-decoration:none;font-weight:600;">Password</a>
+            <a href="{{ url_for('auth.logout') }}" style="color:#FF8200;background:#fff;padding:4px 8px;border-radius:6px;text-decoration:none;font-weight:600;">Logout</a>
         </div>
         {% endif %}
     </header>
@@ -246,7 +246,7 @@
                 <iframe id="full-pdf" src="" style="display:none;width:100%;height:100%;border:none;flex:1 1 auto;"></iframe>
                 <button id="close-full-image" style="display:none;" onclick="hideFullImage()">Close</button>
             </div>
-            <script id="all-images-data" type="application/json">[{% for img in images %}{"id":{{ img.id }},"filename":"{{ img.filename }}","url":"{{ url_for('main.uploaded_file', filename=img.filename) }}","phase_id":{{ img.phase_id if img.phase_id else 'null' }},"item_id":{{ img.item_id if img.item_id else 'null' }},"subitem_id":{{ img.subitem_id if img.subitem_id else 'null' }} }{% if not loop.last %},{% endif %}{% endfor %}]</script>
+            <script id="all-images-data" type="application/json">[{% for img in images %}{"id":{{ img.id }},"filename":"{{ img.filename }}","url":"{{ url_for('media.uploaded_file', filename=img.filename) }}","phase_id":null,"item_id":null,"subitem_id":null }{% if not loop.last %},{% endif %}{% endfor %}]</script>
         </div>
     <div id="viewer-resize-handle" class="resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize image viewer" title="Drag to resize (double-click to reset)"></div>
                 <div class="planning-section">
@@ -2066,5 +2066,8 @@ function addLaneBands(){
             }
         }
     </script>
+<footer style="position:fixed;left:0;right:0;bottom:0;padding:4px 10px;font:11px 'Segoe UI',Arial,sans-serif;color:#eee;background:rgba(0,0,0,0.55);text-align:center;z-index:5000;backdrop-filter:blur(4px);">
+Copyright 2025 © LSI Graphics, LLC. All Rights Reserved
+</footer>
 </body>
 </html>

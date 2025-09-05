@@ -74,7 +74,7 @@ image_item = db.Table(
 image_subitem = db.Table(
     'image_subitem',
     db.Column('image_id', db.Integer, db.ForeignKey('image.id'), primary_key=True),
-    db.Column('subitem_id', db.Integer, db.ForeignKey('sub_item.id'), primary_key=True)
+    db.Column('sub_item_id', db.Integer, db.ForeignKey('sub_item.id'), primary_key=True)
 )
 
 class Image(db.Model):
