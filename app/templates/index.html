@@ -33,6 +33,11 @@
     .img-badges span:hover { transform:scale(1.15); }
         /* Group band styling */
         .phase-group-band { fill:rgba(255,130,0,0.06); }
+    /* Gantt header/legend text darker for visibility */
+    .gantt .grid-header text,
+    .gantt .lower-text,
+    .gantt .upper-text,
+    .gantt .grid .tick text { fill:#4B4B4B !important; font-weight:600; }
         body {
             margin: 0;
             font-family: 'Segoe UI', 'Arial', sans-serif;
@@ -119,6 +124,33 @@
             padding: 0 1.25em 2em 1.25em;
             box-sizing:border-box;
         }
+    /* Sleeker Holding Area */
+    #holding-area { border:1px solid #555; background:#2b2b2b; padding:12px 14px; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,0.15); }
+    #holding-area h4 { margin:0 0 8px 0; color:#eee; font-size:0.95em; display:flex; align-items:center; gap:8px; }
+    #holding-area h4 span { font-weight:400; font-size:0.8em; opacity:.85; color:#ccc; }
+    #holding-area input[type="text"],
+    #holding-area input[type="date"],
+    #holding-area input[type="number"],
+    #holding-area select { width:100%; background:#222; color:#eee; border:1px solid #555; border-radius:8px; padding:6px 8px; box-sizing:border-box; }
+    #holding-area label { color:#ddd; }
+    #holding-area button { background:#FF8200; color:#111; border:none; border-radius:8px; padding:6px 12px; font-weight:700; cursor:pointer; }
+    #holding-area button:hover { background:#ff9933; }
+    /* Image viewer top bar + form sleek styling */
+    .image-viewer .viewer-header { background:#333; border:1px solid #555; border-radius:10px; padding:6px 10px; display:flex; align-items:center; gap:10px; margin:0 0 8px 0; }
+    .image-viewer .viewer-header h2 { margin:0; font-size:1.05em; font-weight:700; }
+    .image-viewer .viewer-header button { margin-left:auto; background:#222; color:#eee; border:1px solid #555; padding:6px 10px; border-radius:8px; font-size:0.8em; font-weight:600; cursor:pointer; }
+    .image-viewer .viewer-header button:hover { background:#2a2a2a; }
+    .image-viewer form input[type="file"],
+    .image-viewer form select { background:#333; border:1px solid #555; color:#eee; border-radius:8px; padding:6px 8px; }
+    .image-viewer form button[type="submit"] { background:#FF8200; color:#111; border:none; border-radius:8px; padding:6px 12px; font-weight:700; }
+    .image-viewer form button[type="submit"]:hover { background:#ff9933; }
+    /* Project toolbar sleek styling */
+    .project-toolbar { background:#333; border:1px solid #555; border-radius:12px; padding:8px 12px; display:flex; align-items:center; gap:.75em; margin-bottom:1.25em; }
+    .project-toolbar label { font-weight:600; color:#ddd; }
+    .project-toolbar select,
+    .project-toolbar input[type="text"] { background:#222; border:1px solid #555; color:#eee; border-radius:8px; padding:6px 8px; }
+    .project-toolbar button { background:#FF8200; color:#111; border:none; border-radius:8px; padding:6px 10px; font-weight:700; cursor:pointer; }
+    .project-toolbar button:hover { background:#ff9933; }
         @media (max-width:1400px){
             #image-viewer-panel{ width:320px !important; }
         }
@@ -208,7 +240,7 @@
     <!-- Dark mode is now default -->
     <div class="container">
     <div class="image-viewer" id="image-viewer-panel">
-            <h2 style="display:flex;align-items:center;gap:10px;">Image Viewer <button id="toggle-gallery" type="button" style="margin-left:auto;background:#444;color:#fff;border:none;padding:6px 12px;border-radius:20px;font-size:0.7em;font-weight:600;cursor:pointer;">Gallery View</button></h2>
+            <div class="viewer-header"><h2>Image Viewer</h2><button id="toggle-gallery" type="button">Gallery View</button></div>
             <form action="/media/upload" method="post" enctype="multipart/form-data">
                 <input type="file" name="file" accept="image/png, image/jpeg, application/pdf" multiple>
                 <select name="association-type">
@@ -253,10 +285,10 @@
     <div id="viewer-resize-handle" class="resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize image viewer" title="Drag to resize (double-click to reset)"></div>
                 <div class="planning-section">
                     <div class="planning-scroll">
-            <div style="margin-bottom:2em;display:flex;align-items:center;gap:1em;">
+            <div class="project-toolbar">
                 <label for="project-select" style="font-weight:600;">Project:</label>
                 <form id="project-select-form" method="post" action="/set_project" style="display:inline-block;">
-                    <select name="project-id" id="project-select" style="min-width:180px;">
+                    <select name="project-id" id="project-select">
                         <option value="">Select Project</option>
                         {% for project in projects %}
                         <option value="{{ project.id }}" {% if selected_project_id and project.id|string == selected_project_id|string %}selected{% endif %}>{{ project.title }}</option>
@@ -265,22 +297,22 @@
                     <button type="submit">Go</button>
                 </form>
                 <form id="project-form" action="/create_project" method="post" style="display:inline-block;">
-                    <input type="text" name="project-title" placeholder="New Project Title" required style="min-width:160px;">
+                    <input type="text" name="project-title" placeholder="New Project Title" required>
                     <button type="submit">Create New Project</button>
                 </form>
             </div>
                         <h2>Planning Section</h2>
                         <h3 style="margin-top:1.5em;">Drafts / Holding Area</h3>
-                        <section id="holding-area" style="margin:10px 0 24px 0; border:1px solid #FF8200; padding:10px 12px; border-radius:10px; background:rgba(255,130,0,0.08);">
-                            <h4 style="margin:0 0 8px 0;color:#FF8200;font-size:0.95em;display:flex;align-items:center;gap:8px;">Holding Area (Draft Parts) <span style="font-weight:400;font-size:0.8em;opacity:.8;">Title-only drafts appear here as orange chips until promoted.</span></h4>
+                        <section id="holding-area" style="margin:10px 0 24px 0;">
+                            <h4>Holding Area (Draft Parts) <span>Title-only drafts appear here as orange chips until promoted.</span></h4>
                             <form id="draft-create-form" style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;">
                                 <div style="flex:2 1 240px;min-width:200px;">
-                                    <label style="display:block;font-size:0.65em;opacity:.75;">Title *</label>
-                                    <input type="text" name="draft-title" placeholder="Draft Title" required style="width:100%;">
+                                    <label style="display:block;font-size:0.75em;opacity:.85;">Title *</label>
+                                    <input type="text" name="draft-title" placeholder="Draft Title" required>
                                 </div>
                                 <div style="flex:1 1 130px;min-width:120px;">
-                                    <label style="display:block;font-size:0.65em;opacity:.75;">Type (optional)</label>
-                                    <select name="draft-type" style="width:100%;">
+                                    <label style="display:block;font-size:0.75em;opacity:.85;">Type (optional)</label>
+                                    <select name="draft-type">
                                         <option value="">(none)</option>
                                         <option value="phase">Phase</option>
                                         <option value="feature">Feature</option>
@@ -288,12 +320,12 @@
                                     </select>
                                 </div>
                                 <div style="flex:1 1 140px;min-width:120px;">
-                                    <label style="display:block;font-size:0.65em;opacity:.75;">Start (opt)</label>
-                                    <input type="date" name="draft-start" style="width:100%;">
+                                    <label style="display:block;font-size:0.75em;opacity:.85;">Start (opt)</label>
+                                    <input type="date" name="draft-start">
                                 </div>
                                 <div style="flex:0 0 110px;">
-                                    <label style="display:block;font-size:0.65em;opacity:.75;">Duration (d, opt)</label>
-                                    <input type="number" name="draft-duration" min="1" style="width:100%;">
+                                    <label style="display:block;font-size:0.75em;opacity:.85;">Duration (d, opt)</label>
+                                    <input type="number" name="draft-duration" min="1">
                                 </div>
                                 <div style="flex:0 0 100px;display:flex;align-items:center;gap:6px;margin-top:18px;">
                                     <label style="font-size:0.7em;opacity:.8;display:flex;align-items:center;gap:4px;">Milestone <input type="checkbox" name="draft-milestone"></label>
@@ -590,6 +622,12 @@
                                                             if(obj){ obj.phase_id = (target_type==='phase')?parseInt(target_id):null; obj.feature_id = (target_type==='feature')?parseInt(target_id):null; obj.item_id = (target_type==='item')?parseInt(target_id):null; }
                                                             // brief highlight feedback
                                                             try { bar.style.outline='2px solid #FF8200'; setTimeout(()=>{ bar.style.outline=''; }, 400); } catch(e){}
+                                                            // If current selection matches drop target, refresh associated thumbnails view
+                                                            try {
+                                                                if(window._currentSelection && window._currentSelection.type===target_type && String(window._currentSelection.id)===String(target_id)){
+                                                                    loadAssociatedThumbnails(target_type, parseInt(target_id));
+                                                                }
+                                                            } catch(e){}
                                                         } else { alert(resp.error||'Association failed'); }
                                                         clearHighlights();
                                                       })
