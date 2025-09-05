@@ -193,7 +193,7 @@
                 <div style="position:absolute;right:14px;bottom:10px;font:12px/1.2 'Segoe UI',sans-serif;color:#ddd;background:rgba(0,0,0,0.25);padding:6px 10px;border-radius:8px;backdrop-filter:blur(2px);display:flex;align-items:center;gap:10px;">
                         <div style="display:flex;flex-direction:column;gap:2px;">
                             <span style="opacity:0.9;font-weight:600;">You: {{ current_user.username }}</span>
-                              <span style="font-size:11px;opacity:.85;">Active: <span id="active-user-chips">{% for u in active_usernames %}{% if u!=current_user.username %}<span class='active-chip' style='background:#555;color:#fff;padding:2px 6px;border-radius:12px;margin-right:4px;'>{{ u }}</span>{% endif %}{% endfor %}</span></span>
+                              <span style="font-size:11px;opacity:.85;">Active: <span id="active-user-chips">{% set others = active_usernames|reject('equalto', current_user.username)|list %}{% if others|length == 0 %}<em style='color:#ccc;'>just you</em>{% else %}{% for u in others %}<span class='active-chip' style='background:#555;color:#fff;padding:2px 6px;border-radius:12px;margin-right:4px;'>{{ u }}</span>{% endfor %}{% endif %}</span></span>
                         </div>
             {% if current_user.is_admin %}
             <a href="{{ url_for('main.admin_users') }}" style="color:#FF8200;background:#fff;padding:4px 8px;border-radius:6px;text-decoration:none;font-weight:600;">Admin</a>
@@ -207,7 +207,7 @@
     <div class="container">
     <div class="image-viewer" id="image-viewer-panel">
             <h2 style="display:flex;align-items:center;gap:10px;">Image Viewer <button id="toggle-gallery" type="button" style="margin-left:auto;background:#444;color:#fff;border:none;padding:6px 12px;border-radius:20px;font-size:0.7em;font-weight:600;cursor:pointer;">Gallery View</button></h2>
-            <form action="/upload" method="post" enctype="multipart/form-data">
+            <form action="/media/upload" method="post" enctype="multipart/form-data">
                 <input type="file" name="file" accept="image/png, image/jpeg, application/pdf" multiple>
                 <select name="association-type" required>
                     <option value="">Associate With...</option>
@@ -257,7 +257,7 @@
                     <select name="project-id" id="project-select" style="min-width:180px;">
                         <option value="">Select Project</option>
                         {% for project in projects %}
-                        <option value="{{ project.id }}">{{ project.title }}</option>
+                        <option value="{{ project.id }}" {% if selected_project_id and project.id|string == selected_project_id|string %}selected{% endif %}>{{ project.title }}</option>
                         {% endfor %}
                     </select>
                     <button type="submit">Go</button>
@@ -426,7 +426,7 @@
                         <select name="project-id" id="unified-project-id" style="width:100%;">
                             <option value="">Project</option>
                             {% for project in projects %}
-                            <option value="{{ project.id }}">{{ project.title }}</option>
+                            <option value="{{ project.id }}" {% if selected_project_id and project.id|string == selected_project_id|string %}selected{% endif %}>{{ project.title }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -513,6 +513,15 @@
                     const itemWrap = document.getElementById('item-select-wrapper');
                     const form = document.getElementById('unified-part-form');
                     const depInput = form.querySelector('input[name="part-dependencies"]');
+                    // Sync selected project from global project selector if present
+                    const globalProj = document.getElementById('project-select');
+                    const unifiedProj = document.getElementById('unified-project-id');
+                    if(globalProj && unifiedProj && globalProj.value && !unifiedProj.value){ unifiedProj.value = globalProj.value; }
+                    if(globalProj && unifiedProj){
+                        globalProj.addEventListener('change', ()=>{
+                            if(globalProj.value){ unifiedProj.value = globalProj.value; }
+                        });
+                    }
                     // Simple dependency suggestions store
                     window._dependencyIds = window._dependencyIds || [];
                     function updateVisibility(){
@@ -1400,7 +1409,7 @@ function addLaneBands(){
             const imageId = parseInt(e.dataTransfer.getData('text/plain'));
             if(!imageId) return;
             const ttype=node.dataset.type; const tid=node.dataset.id;
-            fetch('/associate_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_id:imageId,target_type:ttype,target_id:tid})})
+            fetch('/media/associate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_id:imageId,target_type:ttype,target_id:tid})})
                .then(r=>r.json()).then(resp=>{
                    if(resp.status==='ok'){
                        const img=ALL_IMAGES.find(i=>i.id===imageId); if(img){
@@ -1423,7 +1432,7 @@ function addLaneBands(){
             const selected=document.querySelector('.assoc-node.selected-node');
             let context_type=null, context_id=null;
             if(selected){ context_type=selected.dataset.type; context_id=selected.dataset.id; }
-            fetch('/unlink_image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_id:img.id,context_type,context_id})})
+            fetch('/media/unlink',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_id:img.id,context_type,context_id})})
               .then(r=>r.json())
               .then(resp=>{
                 if(resp.status==='ok'){
@@ -1726,7 +1735,12 @@ function addLaneBands(){
                              function refreshActive(){
                                  fetch('/active_users').then(r=>r.json()).then(j=>{
                                      if(!Array.isArray(j.users)) return; const me='{{ current_user.username }}';
-                                     chipsEl.innerHTML = j.users.filter(u=>u!==me).map(u=>`<span class='active-chip' style='background:#555;color:#fff;padding:2px 6px;border-radius:12px;margin-right:4px;'>${u}</span>`).join('');
+                                     const others = j.users.filter(u=>u!==me);
+                                     if(others.length===0){
+                                         chipsEl.innerHTML = "<em style='color:#ccc;'>just you</em>";
+                                     } else {
+                                         chipsEl.innerHTML = others.map(u=>`<span class='active-chip' style='background:#555;color:#fff;padding:2px 6px;border-radius:12px;margin-right:4px;'>${u}</span>`).join('');
+                                     }
                                  }).catch(()=>{});
                              }
                              setInterval(refreshActive, 20000);
@@ -1959,7 +1973,7 @@ function addLaneBands(){
         (function(){
             const thumbWrap = document.getElementById('image-viewer-thumbnails'); if(!thumbWrap) return;
             async function fetchLinks(id){
-                const r=await fetch(`/image_links/${id}`); if(!r.ok) return null; return r.json();
+                const r=await fetch(`/media/links/${id}`); if(!r.ok) return null; return r.json();
             }
             async function decorateThumb(thumb){
                 if(!thumb || !thumb.dataset || !thumb.dataset.imageId) return;

@@ -194,7 +194,8 @@ from time import time as _time
 from datetime import datetime as _dt, timedelta as _td
 import uuid as _uuid
 
-SESSION_TIMEOUT_MINUTES = 15
+from flask import current_app as _ca
+SESSION_TIMEOUT_MINUTES = lambda: int(_ca.config.get('SESSION_TIMEOUT_MINUTES', 15))
 
 @main.before_app_request
 def _track_presence():
@@ -220,7 +221,7 @@ def _track_presence():
             else:
                 us.last_seen = now
         # Cleanup stale sessions (older than timeout)
-        cutoff = now - _td(minutes=SESSION_TIMEOUT_MINUTES)
+        cutoff = now - _td(minutes=SESSION_TIMEOUT_MINUTES())
         try:
             UserSession.query.filter(UserSession.last_seen < cutoff).delete(synchronize_session=False)
         except Exception:
@@ -230,7 +231,7 @@ def _track_presence():
         db.session.rollback()
 
 def _get_active_usernames():
-    cutoff = _dt.utcnow() - _td(minutes=SESSION_TIMEOUT_MINUTES)
+    cutoff = _dt.utcnow() - _td(minutes=SESSION_TIMEOUT_MINUTES())
     try:
         q = (db.session.query(User.username)
              .join(UserSession, User.id==UserSession.user_id)
@@ -345,7 +346,7 @@ def index():
     images = Image.query.all()
     active_usernames = _get_active_usernames()
     critical_filter_active = session.get('critical_filter') == 'on'
-    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js, draft_json_js=draft_json_js, calendar_events_json=calendar_events_json, critical_path_ids=critical_path_ids, active_usernames=active_usernames, critical_filter_active=critical_filter_active)
+    return render_template('index.html', projects=projects, phases=phases, items=items, subitems=subitems, images=images, uploads_folder=UPLOAD_FOLDER, gantt_json_js=gantt_json_js, draft_json_js=draft_json_js, calendar_events_json=calendar_events_json, critical_path_ids=critical_path_ids, active_usernames=active_usernames, critical_filter_active=critical_filter_active, selected_project_id=selected_project_id)
 
 @main.route('/create_draft_part', methods=['POST'])
 @login_required
@@ -541,6 +542,16 @@ def export_calendar_ics():
 @login_required
 def active_users():
     return {'users': _get_active_usernames()}
+
+@main.route('/healthz')
+def healthz():
+    """Basic health check for uptime monitors (no auth)."""
+    try:
+        # Simple DB check
+        db.session.execute('SELECT 1')
+        return {'status':'ok'}, 200
+    except Exception:
+        return {'status':'degraded'}, 500
 
 @main.route('/set_critical_filter', methods=['POST'])
 @login_required
@@ -856,7 +867,8 @@ def create_part():
     parent_ids = {}
     try:
         if ptype == 'phase':
-            project_id = request.form.get('project-id')
+            # Accept explicit form project-id or fall back to session selection
+            project_id = request.form.get('project-id') or session.get('selected_project_id')
             if not project_id:
                 if not ajax: flash('Project is required for a phase.')
                 return ( {'error':'Project required'}, 400 ) if ajax else redirect(url_for('main.index'))

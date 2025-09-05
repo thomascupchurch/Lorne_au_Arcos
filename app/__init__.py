@@ -1,28 +1,41 @@
 import os
+import logging
 from flask import Flask
+from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
 from flask_login import LoginManager
 from app.models import db, User
-from app.routes import main
+from app.blueprints.auth import auth_bp
+from app.blueprints.admin import admin_bp
+from app.blueprints.utility import utility_bp
+from app.blueprints.planning import planning_bp
+from app.blueprints.media import media_bp
+from config import get_config
 
 def create_app():
-    # Explicitly set static_folder to top-level 'static' directory if not auto-detected
+    # Load .env early
+    load_dotenv()
     app = Flask(__name__, static_folder='../static', static_url_path='/static')
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-insecure')
+    # Load config
+    app.config.from_object(get_config())
     if app.config['SECRET_KEY'] == 'dev-insecure':
-        print('WARNING: Using fallback dev SECRET_KEY; set SECRET_KEY in .env for production.')
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        app.logger.warning('Using fallback dev SECRET_KEY; set SECRET_KEY in .env for production.')
+    # Basic logging config (can be overridden by gunicorn/host)
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s in %(module)s: %(message)s')
     db.init_app(app)
     login_manager = LoginManager()
-    login_manager.login_view = 'main.login'
+    login_manager.login_view = 'auth.login'
     login_manager.init_app(app)
 
     @login_manager.user_loader
     def load_user(user_id):
         return User.query.get(int(user_id))
 
-    app.register_blueprint(main)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(admin_bp)
+    app.register_blueprint(utility_bp)
+    app.register_blueprint(planning_bp)
+    app.register_blueprint(media_bp)
 
     def ensure_admin():
         username = os.getenv('ADMIN_USERNAME')
@@ -45,35 +58,8 @@ def create_app():
         # Optional: you could print/log creation, but avoid noisy stdout in production.
 
     with app.app_context():
-        # Make sure tables exist then ensure admin
-        db.create_all()
-        # Lightweight migration: add notes columns if database existed before (SQLite only)
-        from sqlalchemy import text
-        try:
-            engine = db.engine
-            def ensure_column(table, column_def):
-                col_name = column_def.split()[0]
-                with engine.connect() as conn:
-                    info = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
-                    existing_cols = {r[1] for r in info}
-                    if col_name not in existing_cols:
-                        try:
-                            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column_def}"))
-                        except Exception as e:
-                            # Silent for now; could log e
-                            pass
-            # Existing ad-hoc additions
-            ensure_column('phase', 'notes TEXT')
-            ensure_column('item', 'notes TEXT')
-            ensure_column('sub_item', 'notes TEXT')
-            # Newer schema evolution safeguards (avoid crashes if migrations not run)
-            ensure_column('user', 'last_seen DATETIME')
-            ensure_column('phase', 'sort_order INTEGER DEFAULT 0')
-            ensure_column('item', 'sort_order INTEGER DEFAULT 0')
-            ensure_column('sub_item', 'sort_order INTEGER DEFAULT 0')
-            ensure_column('image', 'project_id INTEGER')
-        except Exception:
-            # Ignore migration issues silently to avoid startup failure
-            pass
+        # For first-run (no migrations run yet) allow create_all, but prefer Alembic afterwards.
+        if not os.path.exists(os.path.join(app.root_path, '..', 'app.db')):
+            db.create_all()
         ensure_admin()
     return app

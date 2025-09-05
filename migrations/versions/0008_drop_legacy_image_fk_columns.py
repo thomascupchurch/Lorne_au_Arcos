@@ -13,18 +13,30 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
-    # Safely drop old single-association columns if they still exist
-    with op.batch_alter_table('image') as batch_op:
-        for col in ('phase_id','item_id','subitem_id'):
-            try:
-                batch_op.drop_constraint(f'fk_image_{col[:-3]}', type_='foreignkey')
-            except Exception:
-                pass
-        for col in ('phase_id','item_id','subitem_id'):
-            try:
-                batch_op.drop_column(col)
-            except Exception:
-                pass
+    """Drop legacy single-link columns (phase_id, item_id, subitem_id) if present.
+
+    The earlier migration created many-to-many link tables but left these
+    foreign key columns (with auto-generated FK constraint names on SQLite).
+    Prior version tried to drop constraints by hard-coded names causing
+    failures. We instead:
+      1. Reflect existing columns.
+      2. If any legacy columns remain, recreate the table dropping them.
+    This is safe & idempotent; reruns become no-ops once columns are gone.
+    """
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    try:
+        existing_cols = {c['name'] for c in inspector.get_columns('image')}
+    except Exception:
+        # Table missing? Nothing to do.
+        return
+    to_drop = [c for c in ('phase_id','item_id','subitem_id') if c in existing_cols]
+    if not to_drop:
+        return
+    # Force recreate to ensure any lingering FK constraints are removed cleanly (SQLite friendly)
+    with op.batch_alter_table('image', recreate='always') as batch_op:
+        for col in to_drop:
+            batch_op.drop_column(col)
 
 
 def downgrade():
